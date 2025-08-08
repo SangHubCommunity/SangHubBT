@@ -1,0 +1,257 @@
+--// GUI Part 1-3: Tạo khung giao diện chính + Toggle + Tab Scroll
+
+local Gui = Instance.new("ScreenGui", game.CoreGui)
+Gui.Name = "BloxFruit_TabGUI"
+Gui.ResetOnSpawn = false
+Gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+-- Toggle Button (Góc trái)
+local ToggleBtn = Instance.new("ImageButton", Gui)
+ToggleBtn.Size = UDim2.new(0, 40, 0, 40)
+ToggleBtn.Position = UDim2.new(0, 10, 0, 10)
+ToggleBtn.Image = "rbxassetid://76955883171909"
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+ToggleBtn.BackgroundTransparency = 0
+ToggleBtn.AutoButtonColor = true
+Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(0, 6)
+
+-- Main UI Frame
+local MainFrame = Instance.new("Frame", Gui)
+MainFrame.Size = UDim2.new(0, 580, 0, 360)
+MainFrame.Position = UDim2.new(0.5, -290, 0.5, -180)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Visible = false
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
+
+-- Logo trong GUI
+local Logo = Instance.new("ImageLabel", MainFrame)
+Logo.Size = UDim2.new(0, 30, 0, 30)
+Logo.Position = UDim2.new(0, 10, 0, 5)
+Logo.BackgroundTransparency = 1
+Logo.Image = "rbxassetid://76955883171909"
+
+-- Tab Scroll (thụt vô trái)
+local TabScroll = Instance.new("ScrollingFrame", MainFrame)
+TabScroll.Size = UDim2.new(1, -40, 0, 40)
+TabScroll.Position = UDim2.new(0, 40, 0, 5)
+TabScroll.BackgroundTransparency = 1
+TabScroll.ScrollBarThickness = 2
+TabScroll.CanvasSize = UDim2.new(0, 800, 0, 0)
+TabScroll.AutomaticCanvasSize = Enum.AutomaticSize.X
+
+local TabLayout = Instance.new("UIListLayout", TabScroll)
+TabLayout.FillDirection = Enum.FillDirection.Horizontal
+TabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+TabLayout.SortOrder = Enum.SortOrder.LayoutOrder
+TabLayout.Padding = UDim.new(0, 5)
+
+-- Tab Names
+local Tabs = {
+    "Tab Status", "Tab General", "Quest & Item",
+    "Race & Gear", "Tab Shop", "Tab Setting", "Mic"
+}
+
+local TabFrames = {}
+
+for _, tabName in ipairs(Tabs) do
+    local TabBtn = Instance.new("TextButton", TabScroll)
+    TabBtn.Size = UDim2.new(0, 100, 1, 0)
+    TabBtn.Text = tabName
+    TabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    TabBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    TabBtn.Font = Enum.Font.GothamBold
+    TabBtn.TextSize = 13
+    TabBtn.AutoButtonColor = true
+    Instance.new("UICorner", TabBtn).CornerRadius = UDim.new(0, 8)
+
+    -- Tab Content  
+    local Content = Instance.new("ScrollingFrame", MainFrame)  
+    Content.Size = UDim2.new(1, -20, 1, -50)  
+    Content.Position = UDim2.new(0, 10, 0, 45)  
+    Content.BackgroundColor3 = Color3.fromRGB(30, 30, 30)  
+    Content.ScrollBarThickness = 3
+    Content.CanvasSize = UDim2.new(0, 0, 1, 0)
+    Content.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    Content.Visible = false
+    Instance.new("UICorner", Content).CornerRadius = UDim.new(0, 10)
+
+    TabFrames[tabName] = Content
+
+    TabBtn.MouseButton1Click:Connect(function()
+        for _, f in pairs(TabFrames) do f.Visible = false end
+        Content.Visible = true
+    end)
+end
+
+-- Mặc định mở tab đầu
+TabFrames["Tab Status"].Visible = true
+
+-- Toggle Show/Hide GUI
+local toggle = false
+ToggleBtn.MouseButton1Click:Connect(function()
+    toggle = not toggle
+    MainFrame.Visible = toggle
+
+    -- Hiệu ứng mở rộng/thu nhỏ
+    if toggle then
+        MainFrame.Size = UDim2.new(0, 0, 0, 0)
+        MainFrame:TweenSize(UDim2.new(0, 580, 0, 360), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.25, true)
+    else
+        MainFrame:TweenSize(UDim2.new(0, 0, 0, 0), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.25, true)
+        wait(0.25)
+        MainFrame.Visible = false
+        MainFrame.Size = UDim2.new(0, 580, 0, 360)
+    end
+end)
+-- Tab General UI chia đôi
+local GeneralTab = TabFrames["Tab General"]
+
+-- Left Panel
+local LeftScroll = Instance.new("ScrollingFrame", GeneralTab)
+LeftScroll.Size = UDim2.new(0.5, -10, 1, 0)
+LeftScroll.Position = UDim2.new(0, 0, 0, 0)
+LeftScroll.CanvasSize = UDim2.new(0, 0, 0, 200)
+LeftScroll.ScrollBarThickness = 4
+LeftScroll.BackgroundTransparency = 1
+
+local LeftLayout = Instance.new("UIListLayout", LeftScroll)
+LeftLayout.Padding = UDim.new(0, 8)
+
+-- Toggle Button Function
+local function createToggleButton(parent, title, callback)
+	local Frame = Instance.new("Frame", parent)
+	Frame.Size = UDim2.new(1, -10, 0, 40)
+	Frame.BackgroundTransparency = 1
+
+	local TextLabel = Instance.new("TextLabel", Frame)
+	TextLabel.Size = UDim2.new(0.8, 0, 1, 0)
+	TextLabel.Text = title
+	TextLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	TextLabel.BackgroundTransparency = 1
+	TextLabel.Font = Enum.Font.GothamBold
+	TextLabel.TextSize = 14
+	TextLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+	local Status = Instance.new("ImageLabel", Frame)
+	Status.Size = UDim2.new(0, 24, 0, 24)
+	Status.Position = UDim2.new(0.9, 0, 0.5, -12)
+	Status.BackgroundTransparency = 1
+	Status.Image = "rbxassetid://6031094664" -- Empty circle
+
+	local Toggle = false
+	Frame.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			Toggle = not Toggle
+			Status.Image = Toggle and "rbxassetid://6031094690" or "rbxassetid://6031094664"
+			if callback then callback(Toggle) end
+		end
+	end)
+end
+
+-- Create Level Farm toggle
+createToggleButton(LeftScroll, "Level Farm", function(state)
+	getgenv().AutoFarmEnabled = state
+end)
+
+-- Select Weapon logic
+local SelectedWeaponType = "Nothing"
+
+-- Dropdown Button
+local DropDownBtn = Instance.new("TextButton", LeftScroll)
+DropDownBtn.Size = UDim2.new(1, -10, 0, 40)
+DropDownBtn.Text = "Select Weapon: " .. SelectedWeaponType
+DropDownBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+DropDownBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+DropDownBtn.Font = Enum.Font.GothamBold
+DropDownBtn.TextSize = 13
+Instance.new("UICorner", DropDownBtn).CornerRadius = UDim.new(0, 8)
+
+-- Dropdown Options Panel
+local WeaponOptions = Instance.new("Frame", DropDownBtn)
+WeaponOptions.Size = UDim2.new(1, 0, 0, 80)
+WeaponOptions.Position = UDim2.new(0, 0, 1, 0)
+WeaponOptions.Visible = false
+WeaponOptions.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+Instance.new("UICorner", WeaponOptions).CornerRadius = UDim.new(0, 8)
+
+local ScrollList = Instance.new("ScrollingFrame", WeaponOptions)
+ScrollList.Size = UDim2.new(1, 0, 1, 0)
+ScrollList.CanvasSize = UDim2.new(0, 0, 0, 100)
+ScrollList.ScrollBarThickness = 3
+ScrollList.BackgroundTransparency = 1
+
+local ListLayout = Instance.new("UIListLayout", ScrollList)
+ListLayout.Padding = UDim.new(0, 3)
+
+-- Melee/Sword selection
+local WeaponTypes = {"Melee", "Sword"}
+for _, weaponType in ipairs(WeaponTypes) do
+	local btn = Instance.new("TextButton", ScrollList)
+	btn.Size = UDim2.new(1, -10, 0, 28)
+	btn.Text = weaponType
+	btn.Font = Enum.Font.Gotham
+	btn.TextSize = 12
+	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+
+	btn.MouseButton1Click:Connect(function()
+		SelectedWeaponType = weaponType
+		DropDownBtn.Text = "Select Weapon: " .. SelectedWeaponType
+		WeaponOptions.Visible = false
+		-- Auto Equip
+		local Backpack = game.Players.LocalPlayer.Backpack
+		for _, tool in ipairs(Backpack:GetChildren()) do
+			if tool:IsA("Tool") then
+				local name = tool.Name:lower()
+				if SelectedWeaponType == "Melee" and (name:find("combat") or name:find("kung") or name:find("dragon") or name:find("super") or name:find("electric") or name:find("shark") or name:find("god") or name:find("death") or name:find("beast")) then
+					game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer("EquipWeapon", tool.Name)
+					break
+				elseif SelectedWeaponType == "Sword" and (name:find("sword") or name:find("katana") or name:find("shisui") or name:find("saber") or name:find("yama") or name:find("cursed") or name:find("dark") or name:find("tushita") or name:find("long") or name:find("dual")) then
+					game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer("EquipWeapon", tool.Name)
+					break
+				end
+			end
+		end
+	end)
+end
+
+-- Toggle dropdown
+DropDownBtn.MouseButton1Click:Connect(function()
+	WeaponOptions.Visible = not WeaponOptions.Visible
+end)
+-- Right Panel Button Function
+local function createRightButton(parent, text, callback)
+	local Btn = Instance.new("TextButton", parent)
+	Btn.Size = UDim2.new(1, -10, 0, 40)
+	Btn.Text = text
+	Btn.Font = Enum.Font.GothamBold
+	Btn.TextSize = 13
+	Btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	Btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
+
+	Btn.MouseButton1Click:Connect(function()
+		if callback then
+			callback()
+		end
+	end)
+end
+
+-- Example Buttons
+createRightButton(RightScroll, "Fast Attack", function()
+	getgenv().FastAttack = not getgenv().FastAttack
+	print("FastAttack:", getgenv().FastAttack)
+end)
+
+createRightButton(RightScroll, "Bring Mob", function()
+	getgenv().BringMob = not getgenv().BringMob
+	print("BringMob:", getgenv().BringMob)
+end)
+
+createRightButton(RightScroll, "Auto Click", function()
+	getgenv().AutoClick = not getgenv().AutoClick
+	print("AutoClick:", getgenv().AutoClick)
+end)
