@@ -302,3 +302,126 @@ task.spawn(function()
 		Label_Time.Text = string.format("Time in Server: %02d:%02d", minutes, seconds)
 	end
 end)
+-- Tab General UI (Panel trái: nút bật farm, Panel phải: chọn weapon)
+local GeneralTab = TabFrames["Tab General"]
+
+-- Scroll bên trái
+local LeftScroll = Instance.new("ScrollingFrame", GeneralTab)
+LeftScroll.Size = UDim2.new(0.5, -10, 1, 0)
+LeftScroll.Position = UDim2.new(0, 0, 0, 0)
+LeftScroll.CanvasSize = UDim2.new(0, 0, 0, 200)
+LeftScroll.ScrollBarThickness = 4
+LeftScroll.BackgroundTransparency = 1
+
+local LeftLayout = Instance.new("UIListLayout", LeftScroll)
+LeftLayout.Padding = UDim.new(0, 8)
+
+-- Scroll bên phải
+local RightScroll = Instance.new("ScrollingFrame", GeneralTab)
+RightScroll.Size = UDim2.new(0.5, -10, 1, 0)
+RightScroll.Position = UDim2.new(0.5, 10, 0, 0)
+RightScroll.CanvasSize = UDim2.new(0, 0, 0, 200)
+RightScroll.ScrollBarThickness = 4
+RightScroll.BackgroundTransparency = 1
+
+local RightLayout = Instance.new("UIListLayout", RightScroll)
+RightLayout.Padding = UDim.new(0, 8)
+
+-- Tạo Toggle Button
+local function createToggleButton(parent, title, callback)
+	local Frame = Instance.new("Frame", parent)
+	Frame.Size = UDim2.new(1, -10, 0, 40)
+	Frame.BackgroundTransparency = 1
+
+	local TextLabel = Instance.new("TextLabel", Frame)
+	TextLabel.Size = UDim2.new(0.8, 0, 1, 0)
+	TextLabel.Text = title
+	TextLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	TextLabel.BackgroundTransparency = 1
+	TextLabel.Font = Enum.Font.GothamBold
+	TextLabel.TextSize = 14
+	TextLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+	local Status = Instance.new("ImageLabel", Frame)
+	Status.Size = UDim2.new(0, 24, 0, 24)
+	Status.Position = UDim2.new(0.9, 0, 0.5, -12)
+	Status.BackgroundTransparency = 1
+	Status.Image = "rbxassetid://6031094664" -- empty circle
+
+	local Toggle = false
+	Frame.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			Toggle = not Toggle
+			Status.Image = Toggle and "rbxassetid://6031094690" or "rbxassetid://6031094664"
+			if callback then callback(Toggle) end
+		end
+	end)
+end
+
+-- Button bật Auto Farm (Panel trái)
+createToggleButton(LeftScroll, "Auto Farm Level", function(state)
+	getgenv().AutoFarmEnabled = state
+end)
+
+-- Tiêu đề Setting Farm (Panel phải)
+local FarmSettingTitle = Instance.new("TextLabel", RightScroll)
+FarmSettingTitle.Size = UDim2.new(1, -10, 0, 30)
+FarmSettingTitle.Text = "Setting Farming"
+FarmSettingTitle.Font = Enum.Font.GothamBold
+FarmSettingTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+FarmSettingTitle.TextSize = 14
+FarmSettingTitle.BackgroundTransparency = 1
+FarmSettingTitle.TextXAlignment = Enum.TextXAlignment.Center
+
+-- Select Weapon (chỉ Sword và Melee)
+local SelectedWeapon = "Nothing"
+
+local DropDownBtn = Instance.new("TextButton", RightScroll)
+DropDownBtn.Size = UDim2.new(1, -10, 0, 40)
+DropDownBtn.Text = "Select Weapon: " .. SelectedWeapon
+DropDownBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+DropDownBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+DropDownBtn.Font = Enum.Font.GothamBold
+DropDownBtn.TextSize = 13
+Instance.new("UICorner", DropDownBtn).CornerRadius = UDim.new(0, 8)
+
+-- Weapon Options
+local WeaponOptions = Instance.new("Frame", DropDownBtn)
+WeaponOptions.Size = UDim2.new(1, 0, 0, 100)
+WeaponOptions.Position = UDim2.new(0, 0, 1, 0)
+WeaponOptions.Visible = false
+WeaponOptions.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+Instance.new("UICorner", WeaponOptions).CornerRadius = UDim.new(0, 8)
+
+local ScrollList = Instance.new("ScrollingFrame", WeaponOptions)
+ScrollList.Size = UDim2.new(1, 0, 1, 0)
+ScrollList.CanvasSize = UDim2.new(0, 0, 0, 200)
+ScrollList.ScrollBarThickness = 3
+ScrollList.BackgroundTransparency = 1
+
+local ListLayout = Instance.new("UIListLayout", ScrollList)
+ListLayout.Padding = UDim.new(0, 3)
+
+local WeaponList = {"Sword", "Melee"}
+
+for _, weapon in ipairs(WeaponList) do
+	local btn = Instance.new("TextButton", ScrollList)
+	btn.Size = UDim2.new(1, -10, 0, 28)
+	btn.Text = weapon
+	btn.Font = Enum.Font.Gotham
+	btn.TextSize = 12
+	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+
+	btn.MouseButton1Click:Connect(function()
+		SelectedWeapon = weapon
+		DropDownBtn.Text = "Select Weapon: " .. SelectedWeapon
+		WeaponOptions.Visible = false
+		getgenv().SelectedWeapon = weapon
+	end)
+end
+
+DropDownBtn.MouseButton1Click:Connect(function()
+	WeaponOptions.Visible = not WeaponOptions.Visible
+end)
