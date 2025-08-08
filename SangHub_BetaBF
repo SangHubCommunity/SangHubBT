@@ -1,3 +1,5 @@
+--===[ Blox Fruits GUI - Tabs Full Part 1-3 ]===--
+
 local Gui = Instance.new("ScreenGui", game.CoreGui)
 Gui.Name = "BloxFruit_TabGUI"
 Gui.ResetOnSpawn = false
@@ -9,6 +11,8 @@ ToggleBtn.Size = UDim2.new(0, 40, 0, 40)
 ToggleBtn.Position = UDim2.new(0, 10, 0, 10)
 ToggleBtn.Image = "rbxassetid://76955883171909"
 ToggleBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+ToggleBtn.BackgroundTransparency = 0
+ToggleBtn.AutoButtonColor = true
 Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(0, 6)
 
 -- Main Frame
@@ -21,7 +25,14 @@ MainFrame.Draggable = true
 MainFrame.Visible = false
 Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
 
--- Tabs Bar
+-- Logo
+local Logo = Instance.new("ImageLabel", MainFrame)
+Logo.Size = UDim2.new(0, 30, 0, 30)
+Logo.Position = UDim2.new(0, 10, 0, 5)
+Logo.BackgroundTransparency = 1
+Logo.Image = "rbxassetid://76955883171909"
+
+-- Tabs Scroll
 local TabScroll = Instance.new("ScrollingFrame", MainFrame)
 TabScroll.Size = UDim2.new(1, -40, 0, 40)
 TabScroll.Position = UDim2.new(0, 40, 0, 5)
@@ -32,109 +43,57 @@ TabScroll.AutomaticCanvasSize = Enum.AutomaticSize.X
 
 local TabLayout = Instance.new("UIListLayout", TabScroll)
 TabLayout.FillDirection = Enum.FillDirection.Horizontal
+TabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+TabLayout.SortOrder = Enum.SortOrder.LayoutOrder
 TabLayout.Padding = UDim.new(0, 5)
 
+-- Tab Names
 local Tabs = {
     "Tab Status", "Tab General", "Quest & Item",
     "Race & Gear", "Tab Shop", "Tab Setting", "Mic"
 }
+
 local TabFrames = {}
 
 for _, tabName in ipairs(Tabs) do
     local TabBtn = Instance.new("TextButton", TabScroll)
     TabBtn.Size = UDim2.new(0, 100, 1, 0)
     TabBtn.Text = tabName
+    TabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    TabBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     TabBtn.Font = Enum.Font.GothamBold
     TabBtn.TextSize = 13
-    TabBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    TabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    TabBtn.AutoButtonColor = true
     Instance.new("UICorner", TabBtn).CornerRadius = UDim.new(0, 8)
 
-    local Content = Instance.new("Frame", MainFrame)
+    local Content = Instance.new("ScrollingFrame", MainFrame)
     Content.Size = UDim2.new(1, -20, 1, -50)
     Content.Position = UDim2.new(0, 10, 0, 45)
     Content.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
     Content.Visible = false
+    Content.ScrollBarThickness = 4
+    Content.CanvasSize = UDim2.new(0, 0, 0, 500)
     Instance.new("UICorner", Content).CornerRadius = UDim.new(0, 10)
 
-    local Scroll = Instance.new("ScrollingFrame", Content)
-    Scroll.Size = UDim2.new(1, 0, 1, 0)
-    Scroll.CanvasSize = UDim2.new(0, 0, 0, 500)
-    Scroll.ScrollBarThickness = 4
-    Scroll.BackgroundTransparency = 1
-
-    TabFrames[tabName] = Scroll
+    TabFrames[tabName] = Content
 
     TabBtn.MouseButton1Click:Connect(function()
-        for _, f in pairs(TabFrames) do f.Parent.Parent.Visible = false end
+        for _, f in pairs(TabFrames) do f.Visible = false end
         Content.Visible = true
     end)
 end
-TabFrames["Tab Status"].Parent.Parent.Visible = true
 
--- Toggle Show GUI
+-- Mặc định mở Tab đầu tiên
+TabFrames["Tab Status"].Visible = true
+
+-- Toggle GUI
 local toggle = false
 ToggleBtn.MouseButton1Click:Connect(function()
     toggle = not toggle
     MainFrame.Visible = toggle
 end)
+--===[ PHẦN 4: Tab General UI + Auto Farm Level + Select Weapon ]===--
 
--- ======= Tab Status Functions ========
-local function StatusLine(parent, name)
-    local label = Instance.new("TextLabel", parent)
-    label.Size = UDim2.new(1, -10, 0, 25)
-    label.Text = name .. ": Checking..."
-    label.Font = Enum.Font.Gotham
-    label.TextSize = 14
-    label.TextColor3 = Color3.fromRGB(255, 255, 255)
-    label.BackgroundTransparency = 1
-    return label
-end
-
-local StatusFrame = TabFrames["Tab Status"]
-local shanksLbl = StatusLine(StatusFrame, "Shanks")
-local wbLbl = StatusLine(StatusFrame, "Whitebeard")
-local sawLbl = StatusLine(StatusFrame, "The Saw")
-local moonLbl = StatusLine(StatusFrame, "Moon Phase")
-local timeLbl = StatusLine(StatusFrame, "Play Time")
-local fruitLbl = StatusLine(StatusFrame, "Fruit Drop")
-
-local seconds = 0
-game:GetService("RunService").RenderStepped:Connect(function(dt)
-    if MainFrame.Visible then
-        seconds += dt
-        local m = math.floor(seconds / 60)
-        local s = math.floor(seconds % 60)
-        timeLbl.Text = "Play Time: " .. string.format("%02d:%02d", m, s)
-    end
-end)
-
-while true do
-    task.wait(120)
-    local bosses = workspace.Enemies:GetChildren()
-    shanksLbl.Text = "Shanks: ❌"
-    wbLbl.Text = "Whitebeard: ❌"
-    sawLbl.Text = "The Saw: ❌"
-    for _, b in ipairs(bosses) do
-        local n = b.Name:lower()
-        if string.find(n, "shank") then shanksLbl.Text = "Shanks: ✅" end
-        if string.find(n, "white") then wbLbl.Text = "Whitebeard: ✅" end
-        if string.find(n, "saw") then sawLbl.Text = "The Saw: ✅" end
-    end
-
-    local moon = game.Lighting:GetMoonPhase()
-    local emoji = {
-        ["New"] = "🌑", ["WaxingCrescent"] = "🌒",
-        ["FirstQuarter"] = "🌓", ["WaxingGibbous"] = "🌔",
-        ["Full"] = "🌕", ["WaningGibbous"] = "🌖",
-        ["LastQuarter"] = "🌗", ["WaningCrescent"] = "🌘"
-    }
-    moonLbl.Text = "Moon Phase: " .. (emoji[moon] or "❌")
-
-    local fruit = workspace:FindFirstChild("Fruit")
-    fruitLbl.Text = "Fruit Drop: " .. (fruit and fruit.Name or "❌")
-end
--- === Tab General UI ===
 local GeneralTab = TabFrames["Tab General"]
 
 -- Left Panel
@@ -144,8 +103,7 @@ LeftScroll.Position = UDim2.new(0, 0, 0, 0)
 LeftScroll.CanvasSize = UDim2.new(0, 0, 0, 200)
 LeftScroll.ScrollBarThickness = 4
 LeftScroll.BackgroundTransparency = 1
-local LeftLayout = Instance.new("UIListLayout", LeftScroll)
-LeftLayout.Padding = UDim.new(0, 8)
+Instance.new("UIListLayout", LeftScroll).Padding = UDim.new(0, 8)
 
 -- Right Panel
 local RightScroll = Instance.new("ScrollingFrame", GeneralTab)
@@ -154,10 +112,9 @@ RightScroll.Position = UDim2.new(0.5, 10, 0, 0)
 RightScroll.CanvasSize = UDim2.new(0, 0, 0, 200)
 RightScroll.ScrollBarThickness = 4
 RightScroll.BackgroundTransparency = 1
-local RightLayout = Instance.new("UIListLayout", RightScroll)
-RightLayout.Padding = UDim.new(0, 8)
+Instance.new("UIListLayout", RightScroll).Padding = UDim.new(0, 8)
 
--- Toggle Function
+--===[ Panel Trái: AUTO FARM LEVEL BUTTON ]===--
 local function createToggleButton(parent, title, callback)
 	local Frame = Instance.new("Frame", parent)
 	Frame.Size = UDim2.new(1, -10, 0, 40)
@@ -176,7 +133,7 @@ local function createToggleButton(parent, title, callback)
 	Status.Size = UDim2.new(0, 24, 0, 24)
 	Status.Position = UDim2.new(0.9, 0, 0.5, -12)
 	Status.BackgroundTransparency = 1
-	Status.Image = "rbxassetid://6031094664" -- Empty
+	Status.Image = "rbxassetid://6031094664" -- empty
 
 	local Toggle = false
 	Frame.InputBegan:Connect(function(input)
@@ -188,22 +145,11 @@ local function createToggleButton(parent, title, callback)
 	end)
 end
 
--- Auto Farm Level Toggle (Left Panel)
 createToggleButton(LeftScroll, "Auto Farm Level", function(state)
 	getgenv().AutoFarmEnabled = state
 end)
 
--- Right Panel Title
-local Title = Instance.new("TextLabel", RightScroll)
-Title.Size = UDim2.new(1, -10, 0, 30)
-Title.Text = "Setting Farming"
-Title.TextColor3 = Color3.fromRGB(255, 255, 0)
-Title.Font = Enum.Font.GothamBold
-Title.TextSize = 16
-Title.BackgroundTransparency = 1
-Title.TextXAlignment = Enum.TextXAlignment.Center
-
--- Weapon Selector (Right Panel)
+--===[ Panel Phải: SELECT WEAPON ]===--
 local SelectedWeapon = "Nothing"
 
 local DropDownBtn = Instance.new("TextButton", RightScroll)
@@ -231,12 +177,12 @@ ScrollList.BackgroundTransparency = 1
 local ListLayout = Instance.new("UIListLayout", ScrollList)
 ListLayout.Padding = UDim.new(0, 3)
 
--- Weapon Choices (only 2)
-local choices = { "Melee", "Sword" }
-for _, weapon in ipairs(choices) do
+local weaponTypes = {"Melee", "Sword"}
+
+for _, w in ipairs(weaponTypes) do
 	local btn = Instance.new("TextButton", ScrollList)
 	btn.Size = UDim2.new(1, -10, 0, 28)
-	btn.Text = weapon
+	btn.Text = w
 	btn.Font = Enum.Font.Gotham
 	btn.TextSize = 12
 	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -244,28 +190,115 @@ for _, weapon in ipairs(choices) do
 	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
 
 	btn.MouseButton1Click:Connect(function()
-		SelectedWeapon = weapon
+		SelectedWeapon = w
 		DropDownBtn.Text = "Select Weapon: " .. SelectedWeapon
 		WeaponOptions.Visible = false
-
-		-- Auto Equip (chỉ ví dụ, cần sửa logic tùy loại vũ khí)
-		local function autoEquip()
-			local Backpack = game.Players.LocalPlayer.Backpack
-			for _, item in ipairs(Backpack:GetChildren()) do
-				if SelectedWeapon == "Melee" and item:IsA("Tool") and item.ToolTip == "Melee" then
-					game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer("EquipWeapon", item.Name)
-					break
-				elseif SelectedWeapon == "Sword" and item:IsA("Tool") and item.ToolTip == "Sword" then
-					game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer("EquipWeapon", item.Name)
-					break
-				end
-			end
-		end
-
-		pcall(autoEquip)
 	end)
 end
 
 DropDownBtn.MouseButton1Click:Connect(function()
 	WeaponOptions.Visible = not WeaponOptions.Visible
+end)
+--===[ PHẦN 5: TAB STATUS ]===--
+
+local StatusTab = TabFrames["Tab Status"]
+
+-- Scroll View cho Tab Status
+local StatusScroll = Instance.new("ScrollingFrame", StatusTab)
+StatusScroll.Size = UDim2.new(1, 0, 1, 0)
+StatusScroll.CanvasSize = UDim2.new(0, 0, 0, 300)
+StatusScroll.ScrollBarThickness = 4
+StatusScroll.BackgroundTransparency = 1
+
+local StatusLayout = Instance.new("UIListLayout", StatusScroll)
+StatusLayout.Padding = UDim.new(0, 6)
+
+-- Tiêu đề giữa "Status Checking"
+local Title = Instance.new("TextLabel", StatusScroll)
+Title.Size = UDim2.new(1, -10, 0, 30)
+Title.Text = "Status Checking"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.BackgroundTransparency = 1
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 18
+Title.TextXAlignment = Enum.TextXAlignment.Center
+
+-- Text Labels cho status
+local Label_Boss = Instance.new("TextLabel", StatusScroll)
+local Label_Moon = Instance.new("TextLabel", StatusScroll)
+local Label_Time = Instance.new("TextLabel", StatusScroll)
+local Label_Player = Instance.new("TextLabel", StatusScroll)
+local Label_Fruit = Instance.new("TextLabel", StatusScroll)
+
+for _, lbl in ipairs({Label_Boss, Label_Moon, Label_Time, Label_Player, Label_Fruit}) do
+	lbl.Size = UDim2.new(1, -10, 0, 25)
+	lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+	lbl.BackgroundTransparency = 1
+	lbl.Font = Enum.Font.Gotham
+	lbl.TextSize = 14
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.Text = "Loading..."
+end
+
+-- Thời gian đã bật script
+local startTime = tick()
+
+-- Hàm check boss spawn
+local function checkBosses()
+	local saw = workspace:FindFirstChild("The Saw") and "✅" or "❌"
+	local whitebeard = workspace:FindFirstChild("Whitebeard") and "✅" or "❌"
+	local shanks = workspace:FindFirstChild("Shanks") and "✅" or "❌"
+
+	Label_Boss.Text = string.format("Boss Spawn - The Saw: %s | Whitebeard: %s | Shanks: %s", saw, whitebeard, shanks)
+end
+
+-- Hàm check moon
+local function checkMoon()
+	local moon = game.Lighting:FindFirstChild("ClockTime")
+	if moon then
+		local phase = game.Lighting:GetMoonPhase and game.Lighting:GetMoonPhase() or ""
+		local emoji = {
+			["NewMoon"] = "🌑",
+			["QuarterMoon"] = "🌓",
+			["HalfMoon"] = "🌗",
+			["FullMoon"] = "🌕"
+		}
+		local moonIcon = emoji[phase] or "❓"
+		Label_Moon.Text = "Moon Phase: " .. moonIcon .. " (" .. (phase or "Unknown") .. ")"
+	else
+		Label_Moon.Text = "Moon Phase: Unknown ❌"
+	end
+end
+
+-- Hàm check người và fruit
+local function checkServerStats()
+	local players = #game.Players:GetPlayers()
+	Label_Player.Text = "Players in Server: " .. tostring(players)
+
+	local fruitFound = false
+	for _, v in pairs(workspace:GetChildren()) do
+		if string.find(v.Name:lower(), "fruit") then
+			fruitFound = true
+			Label_Fruit.Text = "Fruit Spawn / Drop: ✅ (" .. v.Name .. ")"
+			break
+		end
+	end
+
+	if not fruitFound then
+		Label_Fruit.Text = "Fruit Spawn / Drop: ❌"
+	end
+end
+
+-- Auto update loop mỗi 2 giây
+task.spawn(function()
+	while task.wait(2) do
+		checkBosses()
+		checkMoon()
+		checkServerStats()
+
+		local elapsed = math.floor(tick() - startTime)
+		local minutes = math.floor(elapsed / 60)
+		local seconds = elapsed % 60
+		Label_Time.Text = string.format("Time in Server: %02d:%02d", minutes, seconds)
+	end
 end)
