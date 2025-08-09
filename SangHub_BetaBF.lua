@@ -1,29 +1,24 @@
--- SangHub - Integrated GUI + AutoFarm (Part 2 integrated)
--- Raw .lua file: paste into executor
--- NOTE: This script tries to be robust but some checks (moon detection / boss names) depend on how the game represents them.
--- Use at your own risk. I focused on attaching auto-farm (level farm), select-weapon (melee/sword),
--- fast attack (rapid click option), floating platform, hitbox expand and basic quest / tween flow.
+--==[ SangHub BF Script - Part 1 ]==--
 
--- == Anti AFK ==
+-- Anti AFK
 for i,v in pairs(getconnections(game.Players.LocalPlayer.Idled)) do
     pcall(function() v:Disable() end)
 end
 
+-- Services
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
-local RunService = game:GetService("RunService")
 local VirtualInput = game:GetService("VirtualInputManager")
 local LocalPlayer = Players.LocalPlayer
 
--- ====== CONFIG / STATE ======
+-- Config / State
 local StartTime = tick()
 getgenv().AutoFarm = false
-getgenv().SelectedWeapon = "None" -- "Melee" or "Sword"
+getgenv().SelectedWeapon = "None"
 getgenv().FastAttack = false
-getgenv().AutoCollectFruit = false
 
--- ====== DATA: Island positions & level->mob mapping (Sea1 example) ======
+-- Island Positions & LevelToMob for Sea 1
 local IslandPositions = {
     ["Bandit"] = CFrame.new(1060, 16, 1547),
     ["Monkey"] = CFrame.new(-1603, 65, 150),
@@ -80,11 +75,11 @@ local LevelToMob = {
     {LevelReq=625, Mob="Cyborg", Quest="CyborQuest"}
 }
 
--- ====== UTILITIES ======
+-- Utility
 local function getBestForLevel()
     local lvl = 0
     pcall(function() lvl = LocalPlayer.Data.Level.Value end)
-    local best = nil
+    local best
     for _,d in ipairs(LevelToMob) do
         if lvl >= d.LevelReq then best = d end
     end
@@ -97,8 +92,7 @@ local function tweenTo(cf, speed)
     local hrp = LocalPlayer.Character.HumanoidRootPart
     local dist = (hrp.Position - cf.Position).Magnitude
     local t = TweenService:Create(hrp, TweenInfo.new(dist/speed, Enum.EasingStyle.Linear), {CFrame = cf})
-    local ok,err = pcall(function() t:Play() end)
-    if not ok then return end
+    t:Play()
     t.Completed:Wait()
 end
 
@@ -110,11 +104,10 @@ local function sendClick()
     end)
 end
 
--- finds nearest mob model by name (contains)
 local function findNearestMobByName(name)
     local closest, dist = nil, math.huge
     for _,m in pairs(workspace:FindFirstChild("Enemies") and workspace.Enemies:GetChildren() or {}) do
-        if m and m:FindFirstChild("HumanoidRootPart") and m:FindFirstChild("Humanoid") and m.Humanoid.Health > 0 and string.find(m.Name, name) then
+        if m:FindFirstChild("HumanoidRootPart") and m:FindFirstChild("Humanoid") and m.Humanoid.Health > 0 and string.find(m.Name, name) then
             local d = (m.HumanoidRootPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
             if d < dist then dist = d; closest = m end
         end
@@ -124,7 +117,6 @@ end
 
 local function createFloatingPlatform()
     if workspace:FindFirstChild("SangHub_FloatBlock") then return end
-    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
     local p = Instance.new("Part", workspace)
     p.Name = "SangHub_FloatBlock"
     p.Anchored = true
@@ -136,73 +128,49 @@ end
 
 local function removeFloatingPlatform()
     if workspace:FindFirstChild("SangHub_FloatBlock") then
-        pcall(function() workspace.SangHub_FloatBlock:Destroy() end)
+        workspace.SangHub_FloatBlock:Destroy()
     end
 end
 
 local function expandHitbox(m)
-    pcall(function()
-        for _,part in ipairs(m:GetChildren()) do
-            if part:IsA("BasePart") then
-                part.Size = Vector3.new(60,60,60)
-                part.Transparency = 0.6
-                part.CanCollide = false
-                part.Material = Enum.Material.Neon
-            end
-        end
-    end)
-end
-
-local function autoEquipSelected()
-    if not LocalPlayer.Character then return end
-    -- if nothing selected -> skip
-    if getgenv().SelectedWeapon == "Melee" then
-        -- look for any Tool in backpack with ToolTip == "Melee" or name matches known styles
-        for _,v in pairs(LocalPlayer.Backpack:GetChildren()) do
-            if v:IsA("Tool") then
-                if (v.ToolTip and v.ToolTip == "Melee") or string.find(v.Name:lower(),"combat") or string.find(v.Name:lower(),"karate") or string.find(v.Name:lower(),"death") then
-                    pcall(function() LocalPlayer.Character.Humanoid:EquipTool(v) end)
-                    return
-                end
-            end
-        end
-    elseif getgenv().SelectedWeapon == "Sword" then
-        for _,v in pairs(LocalPlayer.Backpack:GetChildren()) do
-            if v:IsA("Tool") then
-                if (v.ToolTip and v.ToolTip == "Sword") or string.find(v.Name:lower(),"katana") or string.find(v.Name:lower(),"sword") or string.find(v.Name:lower(),"blade") then
-                    pcall(function() LocalPlayer.Character.Humanoid:EquipTool(v) end)
-                    return
-                end
-            end
+    for _,part in ipairs(m:GetChildren()) do
+        if part:IsA("BasePart") then
+            part.Size = Vector3.new(60,60,60)
+            part.Transparency = 0.6
+            part.CanCollide = false
+            part.Material = Enum.Material.Neon
         end
     end
 end
 
--- Try remote quest start wrapper
-local function startQuest(quest)
-    pcall(function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("StartQuest", quest, 1)
-    end)
+local function autoEquipSelected()
+    if getgenv().SelectedWeapon == "Melee" then
+        for _,v in pairs(LocalPlayer.Backpack:GetChildren()) do
+            if v:IsA("Tool") and (v.ToolTip == "Melee" or v.Name:lower():find("combat") or v.Name:lower():find("karate")) then
+                LocalPlayer.Character.Humanoid:EquipTool(v) return
+            end
+        end
+    elseif getgenv().SelectedWeapon == "Sword" then
+        for _,v in pairs(LocalPlayer.Backpack:GetChildren()) do
+            if v:IsA("Tool") and (v.ToolTip == "Sword" or v.Name:lower():find("katana") or v.Name:lower():find("sword") or v.Name:lower():find("blade")) then
+                LocalPlayer.Character.Humanoid:EquipTool(v) return
+            end
+        end
+    end
 end
+--==[ SangHub BF Script - Part 2 (GUI + Tabs + Status) ]==--
 
--- Try remote open fruit stock wrapper
-local function openFruitStock()
-    pcall(function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("GetFruits")
-    end)
-end
-
--- ====== GUI (based on your provided base) ======
+-- GUI base (dựa trên bản bạn chốt)
 local Gui = Instance.new("ScreenGui", game.CoreGui)
 Gui.Name = "BloxFruit_TabGUI"
 Gui.ResetOnSpawn = false
 Gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
--- Toggle Button (top-left square rounded with your logo id)
+-- Toggle Button (top-left)
 local ToggleBtn = Instance.new("ImageButton", Gui)
 ToggleBtn.Size = UDim2.new(0, 44, 0, 44)
 ToggleBtn.Position = UDim2.new(0, 12, 0, 12)
-ToggleBtn.Image = "rbxassetid://76955883171909"
+ToggleBtn.Image = "rbxassetid://76955883171909" -- your logo id
 ToggleBtn.BackgroundColor3 = Color3.fromRGB(25,25,25)
 ToggleBtn.AutoButtonColor = true
 ToggleBtn.Name = "SangHubToggle"
@@ -266,7 +234,7 @@ for i, name in ipairs(Tabs) do
     TabFrames[name] = frame
 
     btn.MouseButton1Click:Connect(function()
-        -- do not toggle visibility of mainframe here (user reported). Just switch tabs.
+        -- only switch tabs; do NOT hide MainFrame
         for _,f in pairs(TabFrames) do f.Visible = false end
         frame.Visible = true
     end)
@@ -274,7 +242,7 @@ end
 
 TabFrames["Status"].Visible = true
 
--- ========== STATUS TAB =============
+-- ===== STATUS TAB UI =====
 local StatusTab = TabFrames["Status"]
 
 -- Title centered
@@ -286,10 +254,9 @@ StatusTitle.Font = Enum.Font.GothamBold
 StatusTitle.TextSize = 20
 StatusTitle.TextColor3 = Color3.fromRGB(255,255,255)
 StatusTitle.Text = "Status Checking"
-StatusTitle.TextScaled = false
 StatusTitle.TextXAlignment = Enum.TextXAlignment.Center
 
--- Two-column area (left/right) scrollables
+-- Two-column scrolls
 local left = Instance.new("ScrollingFrame", StatusTab)
 left.Size = UDim2.new(0.5, -10, 1, -50)
 left.Position = UDim2.new(0,5,0,45)
@@ -306,7 +273,7 @@ right.ScrollBarThickness = 6
 local rightLayout = Instance.new("UIListLayout", right)
 rightLayout.Padding = UDim.new(0,6)
 
--- Boss indicators (Shank, Whitebeard, The Saw)
+-- helper to create line
 local function makeStatusLine(parent, title)
     local f = Instance.new("Frame", parent)
     f.Size = UDim2.new(1, -10, 0, 28)
@@ -325,397 +292,333 @@ local function makeStatusLine(parent, title)
     status.Font = Enum.Font.GothamBold
     status.TextSize = 14
     status.TextXAlignment = Enum.TextXAlignment.Right
+    status.Text = "..."
     return f, tl, status
 end
 
-local bossShankF, bossShankL, bossShankStatus = makeStatusLine(left, "Shank tóc đỏ:")
-local bossWhiteF, bossWhiteL, bossWhiteStatus = makeStatusLine(left, "Râu trắng:")
-local bossSawF, bossSawL, bossSawStatus = makeStatusLine(left, "The Saw:")
+-- Boss lines
+local b1f,b1l,b1s = makeStatusLine(left, "Shank tóc đỏ:")
+local b2f,b2l,b2s = makeStatusLine(left, "Râu trắng:")
+local b3f,b3l,b3s = makeStatusLine(left, "The Saw:")
 
-local playersCountLabelF, playersCountLabel, playersCountStatus = makeStatusLine(right, "Players in server:")
-local fruitSpawnF, fruitSpawnL, fruitSpawnStatus = makeStatusLine(right, "FRUIT SPAWN / DROP:")
+-- Right side lines
+local pcf, pcl, pcs = makeStatusLine(right, "Players in server:")
+local ff, fl, fs = makeStatusLine(right, "FRUIT SPAWN / DROP:")
+local tf, tlbl, tsLbl = makeStatusLine(right, "Script uptime:")
+local mf, mll, ms = makeStatusLine(right, "Moon:")
 
-local timeLabelF, timeLabel, timeStatus = makeStatusLine(right, "Script uptime:")
-
-local moonLabelF, moonLabel, moonStatus = makeStatusLine(right, "Moon:")
-
--- Status updater
+-- Status update function (runs periodically)
+local StartTime = tick()
 local function updateStatus()
     -- players
     pcall(function()
         local count = #Players:GetPlayers()
-        playersCountStatus.Text = tostring(count)
+        pcs.Text = tostring(count)
     end)
 
-    -- boss detection heuristics (search workspace for models containing keywords)
+    -- boss detection (search workspace names)
     local foundShank, foundWhite, foundSaw = false,false,false
     for _,v in pairs(workspace:GetDescendants()) do
         if v:IsA("Model") or v:IsA("Folder") then
             local n = v.Name:lower()
-            if n:find("shank") or n:find("shank tóc") or n:find("shank") then foundShank = true end
-            if n:find("whitebeard") or n:find("white beard") or n:find("râu trắng") then foundWhite = true end
+            if n:find("shank") then foundShank = true end
+            if n:find("whitebeard") or n:find("râu trắng") or n:find("white beard") then foundWhite = true end
             if n:find("saw") or n:find("the saw") then foundSaw = true end
         end
     end
-    bossShankStatus.Text = foundShank and "✅" or "❌"
-    bossWhiteStatus.Text = foundWhite and "✅" or "❌"
-    bossSawStatus.Text = foundSaw and "✅" or "❌"
+    b1s.Text = foundShank and "✅" or "❌"
+    b2s.Text = foundWhite and "✅" or "❌"
+    b3s.Text = foundSaw and "✅" or "❌"
 
-    -- fruit spawn detection - list names of tools named Fruit
+    -- fruit detection (tools in workspace containing "fruit")
     local fruitNames = {}
     for _,obj in pairs(workspace:GetChildren()) do
         if obj:IsA("Tool") and obj:FindFirstChild("Handle") and string.match(obj.Name:lower(),"fruit") then
             table.insert(fruitNames, obj.Name)
         end
     end
-    if #fruitNames > 0 then
-        fruitSpawnStatus.Text = table.concat(fruitNames, ", ")
-    else
-        fruitSpawnStatus.Text = "❌"
-    end
+    if #fruitNames > 0 then fs.Text = table.concat(fruitNames, ", ") else fs.Text = "❌" end
 
     -- uptime
     local elapsed = math.floor(tick() - StartTime)
     local hrs = math.floor(elapsed / 3600); local mins = math.floor((elapsed % 3600)/60); local secs = elapsed % 60
-    timeStatus.Text = string.format("%02d:%02d:%02d", hrs, mins, secs)
+    tsLbl.Text = string.format("%02d:%02d:%02d", hrs, mins, secs)
 
-    -- moon detection heuristic (best-effort)
+    -- moon detection (best-effort)
     local moonType = "Unknown"
-    -- try common places: workspace:FindFirstChild("Moon") or ReplicatedStorage:FindFirstChild("Moon")
     local moonObj = workspace:FindFirstChild("Moon") or ReplicatedStorage:FindFirstChild("Moon")
     if moonObj and moonObj.Name:lower():find("real") then
         moonType = "Real 🌘🌗🌖🌕"
     elseif moonObj and moonObj.Name:lower():find("fake") then
         moonType = "Fake 🌒🌓🌖🌑"
     else
-        moonType = "Unknown"
+        -- fallback: try searching terrain/lighting name markers
+        if workspace:FindFirstChild("MoonSurface") then moonType = "Real 🌘🌗🌖🌕" end
     end
-    moonStatus.Text = moonType
+    ms.Text = moonType
 end
 
--- update every 120s for boss check and every 1s for uptime
+-- small loop: update every 1s (uptime) but boss check is cheap anyway
 spawn(function()
     while task.wait(1) do
         pcall(updateStatus)
     end
 end)
 
--- ========== GENERAL TAB (left/right panels) ==========
+-- Toggle visibility with a zoom animation
+local tweenService = game:GetService("TweenService")
+ToggleBtn.MouseButton1Click:Connect(function()
+    local show = not MainFrame.Visible
+    if show then
+        MainFrame.Scale = 0 -- not real property but we'll emulate: set initial small then tween size/position
+        MainFrame.Size = UDim2.new(0,1,0,1)
+        MainFrame.Visible = true
+        local goal = {Size = UDim2.new(0,640,0,420)}
+        local t = TweenInfo.new(0.18, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+        tweenService:Create(MainFrame, t, goal):Play()
+    else
+        local goal = {Size = UDim2.new(0,1,0,1)}
+        local t = TweenInfo.new(0.12, Enum.EasingStyle.Sine, Enum.EasingDirection.In)
+        local tw = tweenService:Create(MainFrame, t, goal)
+        tw:Play()
+        tw.Completed:Wait()
+        MainFrame.Visible = false
+        MainFrame.Size = UDim2.new(0,640,0,420)
+    end
+end)
+
+-- End of Part 2
+print("SangHub: Part 2 (GUI & Status) loaded")
+--==[ SangHub BF Script - Part 3 (Tab General) ]==--
+
 local GeneralTab = TabFrames["General"]
 
--- Left panel = Auto Farm controls (panel styled similar to your request)
+-- Panel Left = Auto Farm
 local LeftPanel = Instance.new("Frame", GeneralTab)
-LeftPanel.Size = UDim2.new(0.5, -10, 1, 0)
+LeftPanel.Size = UDim2.new(0.48, -6, 1, 0)
 LeftPanel.Position = UDim2.new(0, 0, 0, 0)
 LeftPanel.BackgroundTransparency = 1
 
 local LeftScroll = Instance.new("ScrollingFrame", LeftPanel)
-LeftScroll.Size = UDim2.new(1,1,1,0)
-LeftScroll.CanvasSize = UDim2.new(0,0,0,400)
-LeftScroll.ScrollBarThickness = 6
+LeftScroll.Size = UDim2.new(1, 0, 1, 0)
+LeftScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+LeftScroll.ScrollBarThickness = 5
 LeftScroll.BackgroundTransparency = 1
-local LeftList = Instance.new("UIListLayout", LeftScroll); LeftList.Padding = UDim.new(0,8)
+local lLayout = Instance.new("UIListLayout", LeftScroll)
+lLayout.Padding = UDim.new(0,8)
 
--- Right panel = Settings / select weapon
+local AutoFarmTitle = Instance.new("TextLabel", LeftScroll)
+AutoFarmTitle.Size = UDim2.new(1, 0, 0, 26)
+AutoFarmTitle.Text = "Auto Farm"
+AutoFarmTitle.TextColor3 = Color3.fromRGB(255,255,255)
+AutoFarmTitle.BackgroundTransparency = 1
+AutoFarmTitle.Font = Enum.Font.GothamBold
+AutoFarmTitle.TextSize = 15
+AutoFarmTitle.TextXAlignment = Enum.TextXAlignment.Center
+
+-- Auto farm button
+local AutoFarmBtn = Instance.new("TextButton", LeftScroll)
+AutoFarmBtn.Size = UDim2.new(1, 0, 0, 34)
+AutoFarmBtn.Text = "Level Farm"
+AutoFarmBtn.Font = Enum.Font.GothamBold
+AutoFarmBtn.TextSize = 14
+AutoFarmBtn.TextColor3 = Color3.fromRGB(255,255,255)
+AutoFarmBtn.BackgroundColor3 = Color3.fromRGB(30,30,30)
+Instance.new("UICorner", AutoFarmBtn).CornerRadius = UDim.new(0,6)
+
+local TickIcon = Instance.new("ImageLabel", AutoFarmBtn)
+TickIcon.Size = UDim2.new(0, 20, 0, 20)
+TickIcon.Position = UDim2.new(1, -26, 0.5, -10)
+TickIcon.BackgroundTransparency = 1
+TickIcon.Image = "" -- empty by default
+
+local AutoFarmEnabled = false
+AutoFarmBtn.MouseButton1Click:Connect(function()
+    AutoFarmEnabled = not AutoFarmEnabled
+    if AutoFarmEnabled then
+        TickIcon.Image = "rbxassetid://6031094690" -- check mark
+    else
+        TickIcon.Image = ""
+    end
+    getgenv().AutoFarmEnabled = AutoFarmEnabled
+end)
+
+-- Panel Right = Setting Farm
 local RightPanel = Instance.new("Frame", GeneralTab)
-RightPanel.Size = UDim2.new(0.5, -10, 1, 0)
-RightPanel.Position = UDim2.new(0.5, 10, 0, 0)
+RightPanel.Size = UDim2.new(0.48, -6, 1, 0)
+RightPanel.Position = UDim2.new(0.52, 0, 0, 0)
 RightPanel.BackgroundTransparency = 1
 
 local RightScroll = Instance.new("ScrollingFrame", RightPanel)
-RightScroll.Size = UDim2.new(1,1,1,0)
-RightScroll.CanvasSize = UDim2.new(0,0,0,400)
-RightScroll.ScrollBarThickness = 6
+RightScroll.Size = UDim2.new(1, 0, 1, 0)
+RightScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+RightScroll.ScrollBarThickness = 5
 RightScroll.BackgroundTransparency = 1
-local RightList = Instance.new("UIListLayout", RightScroll); RightList.Padding = UDim.new(0,8)
+local rLayout = Instance.new("UIListLayout", RightScroll)
+rLayout.Padding = UDim.new(0,8)
 
--- Helper: small section title
-local function sectionTitle(parent, text)
-    local t = Instance.new("TextLabel", parent)
-    t.Size = UDim2.new(1, -12, 0, 28)
-    t.BackgroundTransparency = 1
-    t.Text = text
-    t.Font = Enum.Font.GothamBold
-    t.TextSize = 15
-    t.TextColor3 = Color3.fromRGB(220,220,220)
-    t.TextXAlignment = Enum.TextXAlignment.Left
-    return t
-end
+-- Title Setting Farm
+local SettingTitle = Instance.new("TextLabel", RightScroll)
+SettingTitle.Size = UDim2.new(1, 0, 0, 26)
+SettingTitle.Text = "Setting Farm"
+SettingTitle.TextColor3 = Color3.fromRGB(255,255,255)
+SettingTitle.BackgroundTransparency = 1
+SettingTitle.Font = Enum.Font.GothamBold
+SettingTitle.TextSize = 15
+SettingTitle.TextXAlignment = Enum.TextXAlignment.Center
 
-sectionTitle(LeftScroll, "Auto Farm")
--- Level Farm toggle (rectangle + circle)
-local levelFrame = Instance.new("Frame", LeftScroll)
-levelFrame.Size = UDim2.new(1, -12, 0, 60)
-levelFrame.BackgroundTransparency = 1
+-- Time server
+local ServerTimeLbl = Instance.new("TextLabel", RightScroll)
+ServerTimeLbl.Size = UDim2.new(1, 0, 0, 20)
+ServerTimeLbl.BackgroundTransparency = 1
+ServerTimeLbl.Font = Enum.Font.Gotham
+ServerTimeLbl.TextSize = 13
+ServerTimeLbl.TextColor3 = Color3.fromRGB(200,200,200)
+ServerTimeLbl.TextXAlignment = Enum.TextXAlignment.Center
 
-local lvlLabel = Instance.new("TextLabel", levelFrame)
-lvlLabel.Size = UDim2.new(0.7,0,1,0)
-lvlLabel.BackgroundTransparency = 1
-lvlLabel.Text = "Level Farm"
-lvlLabel.Font = Enum.Font.Gotham
-lvlLabel.TextSize = 16
-lvlLabel.TextColor3 = Color3.new(1,1,1)
-lvlLabel.TextXAlignment = Enum.TextXAlignment.Left
-
-local circle = Instance.new("ImageLabel", levelFrame)
-circle.Size = UDim2.new(0,34,0,34)
-circle.Position = UDim2.new(0.78,0,0.14,0)
-circle.BackgroundTransparency = 1
-circle.Image = "rbxassetid://6031094664" -- empty circle
-local cCorner = Instance.new("UICorner", circle); cCorner.CornerRadius = UDim.new(0,18)
-
-local lvlToggle = false
-local lvlBtn = Instance.new("TextButton", levelFrame)
-lvlBtn.Size = UDim2.new(0.2, -8, 0.9, 0)
-lvlBtn.Position = UDim2.new(0.78, 0, 0.05, 0)
-lvlBtn.Text = ""
-lvlBtn.BackgroundTransparency = 1
-lvlBtn.AutoButtonColor = true
-lvlBtn.MouseButton1Click:Connect(function()
-    lvlToggle = not lvlToggle
-    circle.Image = lvlToggle and "rbxassetid://6031094690" or "rbxassetid://6031094664"
-    getgenv().AutoFarm = lvlToggle
-    -- start auto farm loop is handled below
-end)
-
--- Right panel: select weapon (only Melee / Sword)
-sectionTitle(RightScroll, "Setting Farming")
-local selFrame = Instance.new("Frame", RightScroll)
-selFrame.Size = UDim2.new(1, -12, 0, 80)
-selFrame.BackgroundTransparency = 1
-
-local selLabel = Instance.new("TextLabel", selFrame)
-selLabel.Size = UDim2.new(1, 0, 0, 24)
-selLabel.Position = UDim2.new(0,0,0,0)
-selLabel.BackgroundTransparency = 1
-selLabel.Text = "Select Weapon: Nothing"
-selLabel.Font = Enum.Font.Gotham
-selLabel.TextSize = 14
-selLabel.TextColor3 = Color3.new(1,1,1)
-selLabel.TextXAlignment = Enum.TextXAlignment.Left
-
-local selButtons = Instance.new("Frame", selFrame)
-selButtons.Size = UDim2.new(1,0,0,44)
-selButtons.Position = UDim2.new(0,0,0,28)
-selButtons.BackgroundTransparency = 1
-
-local meleeBtn = Instance.new("TextButton", selButtons)
-meleeBtn.Size = UDim2.new(0.48, -6, 1, 0)
-meleeBtn.Position = UDim2.new(0,0,0,0)
-meleeBtn.Text = "Melee 🥋"
-meleeBtn.Font = Enum.Font.GothamBold
-meleeBtn.TextSize = 14
-meleeBtn.BackgroundColor3 = Color3.fromRGB(28,28,28)
-meleeBtn.TextColor3 = Color3.new(1,1,1)
-Instance.new("UICorner", meleeBtn).CornerRadius = UDim.new(0,6)
-
-local swordBtn = Instance.new("TextButton", selButtons)
-swordBtn.Size = UDim2.new(0.48, -6, 1, 0)
-swordBtn.Position = UDim2.new(0.52, 0, 0, 0)
-swordBtn.Text = "Sword ⚔️"
-swordBtn.Font = Enum.Font.GothamBold
-swordBtn.TextSize = 14
-swordBtn.BackgroundColor3 = Color3.fromRGB(28,28,28)
-swordBtn.TextColor3 = Color3.new(1,1,1)
-Instance.new("UICorner", swordBtn).CornerRadius = UDim.new(0,6)
-
-meleeBtn.MouseButton1Click:Connect(function()
-    getgenv().SelectedWeapon = "Melee"
-    selLabel.Text = "Select Weapon: Melee"
-end)
-swordBtn.MouseButton1Click:Connect(function()
-    getgenv().SelectedWeapon = "Sword"
-    selLabel.Text = "Select Weapon: Sword"
-end)
-
--- Fast Attack toggle
-local fastFrame = Instance.new("Frame", RightScroll)
-fastFrame.Size = UDim2.new(1, -12, 0, 44)
-fastFrame.BackgroundTransparency = 1
-local fastLabel = Instance.new("TextLabel", fastFrame)
-fastLabel.Size = UDim2.new(0.7,0,1,0)
-fastLabel.BackgroundTransparency = 1
-fastLabel.Text = "Fast Attack"
-fastLabel.Font = Enum.Font.Gotham
-fastLabel.TextColor3 = Color3.new(1,1,1)
-fastLabel.TextSize = 14
-fastLabel.TextXAlignment = Enum.TextXAlignment.Left
-
-local fastCircle = Instance.new("ImageLabel", fastFrame)
-fastCircle.Size = UDim2.new(0,34,0,34)
-fastCircle.Position = UDim2.new(0.78,0,0.1,0)
-fastCircle.BackgroundTransparency = 1
-fastCircle.Image = "rbxassetid://6031094664"
-local fastBtn = Instance.new("TextButton", fastFrame)
-fastBtn.Size = UDim2.new(0.2, -8, 0.9, 0)
-fastBtn.Position = UDim2.new(0.78, 0, 0.05, 0)
-fastBtn.BackgroundTransparency = 1
-fastBtn.AutoButtonColor = true
-local fastToggle = false
-fastBtn.MouseButton1Click:Connect(function()
-    fastToggle = not fastToggle
-    fastCircle.Image = fastToggle and "rbxassetid://6031094690" or "rbxassetid://6031094664"
-    getgenv().FastAttack = fastToggle
-end)
-
--- Auto collect fruit toggle (small)
-local collectFrame = Instance.new("Frame", LeftScroll)
-collectFrame.Size = UDim2.new(1,-12,0,44)
-collectFrame.BackgroundTransparency = 1
-local collectLabel = Instance.new("TextLabel", collectFrame)
-collectLabel.Size = UDim2.new(0.7,0,1,0)
-collectLabel.BackgroundTransparency = 1
-collectLabel.Text = "Auto Collect Fruit"
-collectLabel.Font = Enum.Font.Gotham
-collectLabel.TextColor3 = Color3.new(1,1,1)
-collectLabel.TextSize = 14
-collectLabel.TextXAlignment = Enum.TextXAlignment.Left
-local collectCircle = Instance.new("ImageLabel", collectFrame)
-collectCircle.Size = UDim2.new(0,34,0,34)
-collectCircle.Position = UDim2.new(0.78,0,0.1,0)
-collectCircle.BackgroundTransparency = 1
-collectCircle.Image = "rbxassetid://6031094664"
-local collectBtn = Instance.new("TextButton", collectFrame)
-collectBtn.Size = UDim2.new(0.2,-8,0.9,0)
-collectBtn.Position = UDim2.new(0.78,0,0.05,0)
-collectBtn.BackgroundTransparency = 1
-local collectToggle = false
-collectBtn.MouseButton1Click:Connect(function()
-    collectToggle = not collectToggle
-    collectCircle.Image = collectToggle and "rbxassetid://6031094690" or "rbxassetid://6031094664"
-    getgenv().AutoCollectFruit = collectToggle
-end)
-
--- Toggle mainframe show/hide with scale animation
-local mainVisible = false
-ToggleBtn.MouseButton1Click:Connect(function()
-    mainVisible = not mainVisible
-    if mainVisible then
-        MainFrame.Visible = true
-        MainFrame.Size = UDim2.new(0,0,0,0)
-        TweenService:Create(MainFrame, TweenInfo.new(0.18, Enum.EasingStyle.Sine), {Size = UDim2.new(0,640,0,420)}):Play()
-    else
-        local t = TweenService:Create(MainFrame, TweenInfo.new(0.12, Enum.EasingStyle.Sine), {Size = UDim2.new(0,0,0,0)})
-        t:Play()
-        t.Completed:Wait()
-        MainFrame.Visible = false
-    end
-end)
-
--- Make content scrollable for all tab frames (simple)
-for _,f in pairs(TabFrames) do
-    local scr = Instance.new("ScrollingFrame", f)
-    scr.Size = UDim2.new(1,0,1,0)
-    scr.BackgroundTransparency = 1
-    scr.ScrollBarThickness = 6
-    scr.Visible = false -- hide the extra scroll frame; we already placed content frames manually for Status & General
-    scr.AutomaticCanvasSize = Enum.AutomaticSize.Y
-end
-
--- ====== AUTO FARM LOGIC (INTEGRATED) ======
-local function goToIslandForData(d)
-    if not d then return end
-    if IslandPositions[d.Mob] then
-        pcall(function() tweenTo(IslandPositions[d.Mob]); task.wait(0.6) end)
-    end
-end
-
-local function performFarmOnce(data)
-    if not data then return end
-    -- ensure quest
-    pcall(function()
-        -- If player already has quest visible skip, otherwise go to NPC and start
-        -- Attempt to find quest NPC by name (Quest strings used earlier may not correspond to NPC model names, so this is best-effort)
-        -- We'll call StartQuest directly (may require being near NPC in some servers)
-        startQuest(data.Quest)
-    end)
-
-    -- attempt to get mobs and fight
-    while getgenv().AutoFarm do
-        if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then break end
-        local mob = findNearestMobByName(data.Mob)
-        if mob and mob:FindFirstChild("HumanoidRootPart") and mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
-            -- bring mob up, expand hitbox, create platform, equip
-            createFloatingPlatform()
-            pcall(expandHitbox, mob)
-            pcall(function()
-                -- move above mob
-                tweenTo(mob.HumanoidRootPart.CFrame + Vector3.new(0,15,0), 400)
-            end)
-            -- equip
-            pcall(autoEquipSelected)
-            -- fight until mob dead or stop
-            repeat
-                if getgenv().FastAttack then
-                    -- faster clicks
-                    for i=1,3 do sendClick() end
-                else
-                    sendClick()
-                end
-                task.wait(0.06)
-            until not mob.Parent or not getgenv().AutoFarm or (mob:FindFirstChild("Humanoid") and mob.Humanoid.Health <= 0)
-            task.wait(0.2)
-        else
-            -- no mob found, break to allow loop to request quest / wait for spawn
-            break
-        end
-        task.wait(0.5)
-    end
-end
-
--- farm loop: tries to find best mob for current level and run performFarmOnce
+-- update time every second
 spawn(function()
     while task.wait(1) do
-        if getgenv().AutoFarm then
+        local t = os.date("!%H:%M:%S")
+        ServerTimeLbl.Text = "Server Time: " .. t
+    end
+end)
+
+-- Select Weapon button
+local SelectedWeapon = "Nothing"
+local DropDownBtn = Instance.new("TextButton", RightScroll)
+DropDownBtn.Size = UDim2.new(1, 0, 0, 34)
+DropDownBtn.Text = "Select Weapon: " .. SelectedWeapon
+DropDownBtn.Font = Enum.Font.GothamBold
+DropDownBtn.TextSize = 14
+DropDownBtn.TextColor3 = Color3.fromRGB(255,255,255)
+DropDownBtn.BackgroundColor3 = Color3.fromRGB(30,30,30)
+Instance.new("UICorner", DropDownBtn).CornerRadius = UDim.new(0,6)
+
+-- Options frame
+local WeaponOptions = Instance.new("Frame", DropDownBtn)
+WeaponOptions.Size = UDim2.new(1, 0, 0, 90)
+WeaponOptions.Position = UDim2.new(0, 0, 1, 0)
+WeaponOptions.Visible = false
+WeaponOptions.BackgroundColor3 = Color3.fromRGB(25,25,25)
+Instance.new("UICorner", WeaponOptions).CornerRadius = UDim.new(0,6)
+
+local ScrollList = Instance.new("ScrollingFrame", WeaponOptions)
+ScrollList.Size = UDim2.new(1, 0, 1, 0)
+ScrollList.CanvasSize = UDim2.new(0, 0, 0, 60)
+ScrollList.ScrollBarThickness = 4
+ScrollList.BackgroundTransparency = 1
+local slLayout = Instance.new("UIListLayout", ScrollList)
+slLayout.Padding = UDim.new(0,4)
+
+local Weapons = {"Melee","Sword"}
+for _, name in ipairs(Weapons) do
+    local btn = Instance.new("TextButton", ScrollList)
+    btn.Size = UDim2.new(1, -8, 0, 26)
+    btn.Text = name
+    btn.Font = Enum.Font.Gotham
+    btn.TextSize = 13
+    btn.TextColor3 = Color3.fromRGB(255,255,255)
+    btn.BackgroundColor3 = Color3.fromRGB(40,40,40)
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0,6)
+    btn.MouseButton1Click:Connect(function()
+        SelectedWeapon = name
+        DropDownBtn.Text = "Select Weapon: " .. SelectedWeapon
+        WeaponOptions.Visible = false
+    end)
+end
+
+DropDownBtn.MouseButton1Click:Connect(function()
+    WeaponOptions.Visible = not WeaponOptions.Visible
+end)
+
+-- Auto re-equip when farming
+spawn(function()
+    while task.wait(1) do
+        if AutoFarmEnabled and SelectedWeapon ~= "Nothing" then
             pcall(function()
-                local data = getBestForLevel()
-                if not data then return end
-                goToIslandForData(data)
-                task.wait(1)
-                -- ensure auto-equip before starting
-                pcall(autoEquipSelected)
-                -- start fighting loop
-                performFarmOnce(data)
-                -- small wait to prevent tight loop; quest re-evaluation will occur
-                task.wait(1)
+                local tool = game.Players.LocalPlayer.Character:FindFirstChildOfClass("Tool")
+                if not tool or not tool.Name:lower():find(SelectedWeapon:lower()) then
+                    game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer("EquipWeapon", SelectedWeapon)
+                end
             end)
-        else
-            removeFloatingPlatform()
-            task.wait(1)
         end
     end
 end)
 
--- auto collect fruit loop
-spawn(function()
-    while task.wait(5) do
-        if getgenv().AutoCollectFruit then
+-- Add panels to tab
+LeftPanel.Parent = GeneralTab
+RightPanel.Parent = GeneralTab
+
+-- End of Part 3
+print("SangHub: Part 3 (General tab) loaded")
+--==[ SangHub BF Script - Part 4 (Auto Farm Logic) ]==--
+
+-- Fast Attack function
+local function fastAttack()
+    local vu = game:GetService("VirtualUser")
+    vu:CaptureController()
+    vu:Button1Down(Vector2.new(0,0))
+    task.wait(0.05)
+    vu:Button1Up(Vector2.new(0,0))
+end
+
+-- Fake platform
+local function createPlatform()
+    local part = Instance.new("Part")
+    part.Size = Vector3.new(8,1,8)
+    part.Anchored = true
+    part.Transparency = 1
+    part.CanCollide = true
+    part.Parent = workspace
+    return part
+end
+
+-- Farm function
+local function farmTarget(target)
+    if not target or not target:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = target.HumanoidRootPart
+    local platform = createPlatform()
+
+    spawn(function()
+        while AutoFarmEnabled and target and target:FindFirstChild("Humanoid") and target.Humanoid.Health > 0 do
             pcall(function()
-                for _,obj in pairs(workspace:GetChildren()) do
-                    if obj:IsA("Tool") and obj:FindFirstChild("Handle") and string.match(obj.Name:lower(),"fruit") then
-                        pcall(function()
-                            firetouchinterest(LocalPlayer.Character.HumanoidRootPart, obj.Handle, 0)
-                            task.wait(0.05)
-                            firetouchinterest(LocalPlayer.Character.HumanoidRootPart, obj.Handle, 1)
-                        end)
+                -- Ghép 3 con: tìm thêm quái gần đó
+                for _, mob in pairs(workspace.Enemies:GetChildren()) do
+                    if mob ~= target and mob:FindFirstChild("HumanoidRootPart") then
+                        if (mob.HumanoidRootPart.Position - hrp.Position).Magnitude < 50 then
+                            mob.HumanoidRootPart.CFrame = hrp.CFrame
+                        end
                     end
                 end
-            end)
-        end
-    end
-end)
 
--- Auto re-equip if tool lost while farming
+                -- Đưa mình lên trên đầu quái
+                local pos = hrp.Position + Vector3.new(0, target.HumanoidRootPart.Size.Y * 3, 0)
+                platform.Position = Vector3.new(pos.X, pos.Y - 3, pos.Z)
+                game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(pos)
+
+                -- Fast attack
+                fastAttack()
+            end)
+            task.wait(0.05)
+        end
+        platform:Destroy()
+    end)
+end
+
+-- Main farm loop
 spawn(function()
-    while task.wait(1) do
-        if getgenv().AutoFarm then
-            if LocalPlayer.Character and not LocalPlayer.Character:FindFirstChildOfClass("Tool") then
-                pcall(autoEquipSelected)
+    while task.wait(0.2) do
+        if AutoFarmEnabled and SelectedWeapon ~= "Nothing" then
+            -- Tìm quái phù hợp Level hiện tại (bạn có thể dùng bảng BF_LevelFarm)
+            for _, mob in pairs(workspace.Enemies:GetChildren()) do
+                if mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
+                    farmTarget(mob)
+                    break
+                end
             end
         end
     end
 end)
 
--- Final log
-print("✅ SangHub (Part2) GUI+AutoFarm loaded.")
-
+print("SangHub: Part 4 (Auto Farm Logic) loaded")
