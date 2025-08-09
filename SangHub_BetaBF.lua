@@ -1,395 +1,512 @@
--- BloxFruit Tab GUI (Status fix) - RAW .lua
--- Gồm: GUI toggle + TabScroll + Tab Status (boss, fruit, players, elapsed, moon)
--- Paste thẳng vào executor (KRNL/Flux/...) trong Blox Fruits
+-- SangHub - Integrated GUI + AutoFarm (Part 2 integrated)
+-- Raw .lua file: paste into executor
+-- NOTE: This script tries to be robust but some checks (moon detection / boss names) depend on how the game represents them.
+-- Use at your own risk. I focused on attaching auto-farm (level farm), select-weapon (melee/sword),
+-- fast attack (rapid click option), floating platform, hitbox expand and basic quest / tween flow.
+
+-- == Anti AFK ==
+for i,v in pairs(getconnections(game.Players.LocalPlayer.Idled)) do
+    pcall(function() v:Disable() end)
+end
 
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
-local RS = RunService
+local VirtualInput = game:GetService("VirtualInputManager")
+local LocalPlayer = Players.LocalPlayer
 
-local localPlayer = Players.LocalPlayer
+-- ====== CONFIG / STATE ======
+local StartTime = tick()
+getgenv().AutoFarm = false
+getgenv().SelectedWeapon = "None" -- "Melee" or "Sword"
+getgenv().FastAttack = false
+getgenv().AutoCollectFruit = false
 
--- Start time for elapsed counter
-local START_TICK = tick()
+-- ====== DATA: Island positions & level->mob mapping (Sea1 example) ======
+local IslandPositions = {
+    ["Bandit"] = CFrame.new(1060, 16, 1547),
+    ["Monkey"] = CFrame.new(-1603, 65, 150),
+    ["Gorilla"] = CFrame.new(-1337, 40, -30),
+    ["Pirate"] = CFrame.new(-4870, 20, 4323),
+    ["Brute"] = CFrame.new(-5020, 20, 4408),
+    ["Desert Bandit"] = CFrame.new(932, 7, 4486),
+    ["Desert Officer"] = CFrame.new(1572, 10, 4373),
+    ["Snow Bandit"] = CFrame.new(1389, 87, -1297),
+    ["Snowman"] = CFrame.new(1206, 144, -1326),
+    ["Chief Petty Officer"] = CFrame.new(-4881, 20, 3914),
+    ["Sky Bandit"] = CFrame.new(-4950, 295, -2886),
+    ["Dark Master"] = CFrame.new(-5220, 430, -2272),
+    ["Prisoner"] = CFrame.new(5100, 100, 4740),
+    ["Dangerous Prisoner"] = CFrame.new(5200, 100, 4740),
+    ["Toga Warrior"] = CFrame.new(-1790, 560, -2748),
+    ["Gladiator"] = CFrame.new(-1295, 470, -3021),
+    ["Military Soldier"] = CFrame.new(-5400, 90, 5800),
+    ["Military Spy"] = CFrame.new(-5800, 90, 6000),
+    ["Fishman Warrior"] = CFrame.new(60800, 20, 1500),
+    ["Fishman Commando"] = CFrame.new(61000, 20, 1800),
+    ["Wysper"] = CFrame.new(62000, 20, 1600),
+    ["Magma Admiral"] = CFrame.new(-5000, 80, 8500),
+    ["Arctic Warrior"] = CFrame.new(5600, 20, -6500),
+    ["Snow Lurker"] = CFrame.new(5800, 30, -6700),
+    ["Cyborg"] = CFrame.new(6200, 20, -7200)
+}
 
--- ---------- GUI ----------
+local LevelToMob = {
+    {LevelReq=1, Mob="Bandit", Quest="BanditQuest1"},
+    {LevelReq=15, Mob="Monkey", Quest="JungleQuest"},
+    {LevelReq=20, Mob="Gorilla", Quest="JungleQuest"},
+    {LevelReq=30, Mob="Pirate", Quest="BuggyQuest1"},
+    {LevelReq=40, Mob="Brute", Quest="BuggyQuest1"},
+    {LevelReq=60, Mob="Desert Bandit", Quest="DesertQuest"},
+    {LevelReq=75, Mob="Desert Officer", Quest="DesertQuest"},
+    {LevelReq=90, Mob="Snow Bandit", Quest="SnowQuest"},
+    {LevelReq=105, Mob="Snowman", Quest="SnowQuest"},
+    {LevelReq=120, Mob="Chief Petty Officer", Quest="MarineQuest2"},
+    {LevelReq=130, Mob="Sky Bandit", Quest="SkyQuest"},
+    {LevelReq=145, Mob="Dark Master", Quest="SkyQuest"},
+    {LevelReq=190, Mob="Prisoner", Quest="PrisonerQuest"},
+    {LevelReq=210, Mob="Dangerous Prisoner", Quest="PrisonerQuest"},
+    {LevelReq=250, Mob="Toga Warrior", Quest="ColosseumQuest"},
+    {LevelReq=275, Mob="Gladiator", Quest="ColosseumQuest"},
+    {LevelReq=300, Mob="Military Soldier", Quest="MagmaQuest"},
+    {LevelReq=325, Mob="Military Spy", Quest="MagmaQuest"},
+    {LevelReq=375, Mob="Fishman Warrior", Quest="FishmanQuest"},
+    {LevelReq=400, Mob="Fishman Commando", Quest="FishmanQuest"},
+    {LevelReq=450, Mob="Wysper", Quest="SkyExp1"},
+    {LevelReq=475, Mob="Magma Admiral", Quest="SkyExp1"},
+    {LevelReq=525, Mob="Arctic Warrior", Quest="FrostQuest"},
+    {LevelReq=550, Mob="Snow Lurker", Quest="FrostQuest"},
+    {LevelReq=625, Mob="Cyborg", Quest="CyborQuest"}
+}
+
+-- ====== UTILITIES ======
+local function getBestForLevel()
+    local lvl = 0
+    pcall(function() lvl = LocalPlayer.Data.Level.Value end)
+    local best = nil
+    for _,d in ipairs(LevelToMob) do
+        if lvl >= d.LevelReq then best = d end
+    end
+    return best
+end
+
+local function tweenTo(cf, speed)
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
+    speed = speed or 250
+    local hrp = LocalPlayer.Character.HumanoidRootPart
+    local dist = (hrp.Position - cf.Position).Magnitude
+    local t = TweenService:Create(hrp, TweenInfo.new(dist/speed, Enum.EasingStyle.Linear), {CFrame = cf})
+    local ok,err = pcall(function() t:Play() end)
+    if not ok then return end
+    t.Completed:Wait()
+end
+
+local function sendClick()
+    pcall(function()
+        VirtualInput:SendMouseButtonEvent(0,0,0,true,game,0)
+        task.wait()
+        VirtualInput:SendMouseButtonEvent(0,0,0,false,game,0)
+    end)
+end
+
+-- finds nearest mob model by name (contains)
+local function findNearestMobByName(name)
+    local closest, dist = nil, math.huge
+    for _,m in pairs(workspace:FindFirstChild("Enemies") and workspace.Enemies:GetChildren() or {}) do
+        if m and m:FindFirstChild("HumanoidRootPart") and m:FindFirstChild("Humanoid") and m.Humanoid.Health > 0 and string.find(m.Name, name) then
+            local d = (m.HumanoidRootPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
+            if d < dist then dist = d; closest = m end
+        end
+    end
+    return closest
+end
+
+local function createFloatingPlatform()
+    if workspace:FindFirstChild("SangHub_FloatBlock") then return end
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
+    local p = Instance.new("Part", workspace)
+    p.Name = "SangHub_FloatBlock"
+    p.Anchored = true
+    p.CanCollide = true
+    p.Size = Vector3.new(10,1,10)
+    p.Transparency = 1
+    p.Position = LocalPlayer.Character.HumanoidRootPart.Position - Vector3.new(0,3.5,0)
+end
+
+local function removeFloatingPlatform()
+    if workspace:FindFirstChild("SangHub_FloatBlock") then
+        pcall(function() workspace.SangHub_FloatBlock:Destroy() end)
+    end
+end
+
+local function expandHitbox(m)
+    pcall(function()
+        for _,part in ipairs(m:GetChildren()) do
+            if part:IsA("BasePart") then
+                part.Size = Vector3.new(60,60,60)
+                part.Transparency = 0.6
+                part.CanCollide = false
+                part.Material = Enum.Material.Neon
+            end
+        end
+    end)
+end
+
+local function autoEquipSelected()
+    if not LocalPlayer.Character then return end
+    -- if nothing selected -> skip
+    if getgenv().SelectedWeapon == "Melee" then
+        -- look for any Tool in backpack with ToolTip == "Melee" or name matches known styles
+        for _,v in pairs(LocalPlayer.Backpack:GetChildren()) do
+            if v:IsA("Tool") then
+                if (v.ToolTip and v.ToolTip == "Melee") or string.find(v.Name:lower(),"combat") or string.find(v.Name:lower(),"karate") or string.find(v.Name:lower(),"death") then
+                    pcall(function() LocalPlayer.Character.Humanoid:EquipTool(v) end)
+                    return
+                end
+            end
+        end
+    elseif getgenv().SelectedWeapon == "Sword" then
+        for _,v in pairs(LocalPlayer.Backpack:GetChildren()) do
+            if v:IsA("Tool") then
+                if (v.ToolTip and v.ToolTip == "Sword") or string.find(v.Name:lower(),"katana") or string.find(v.Name:lower(),"sword") or string.find(v.Name:lower(),"blade") then
+                    pcall(function() LocalPlayer.Character.Humanoid:EquipTool(v) end)
+                    return
+                end
+            end
+        end
+    end
+end
+
+-- Try remote quest start wrapper
+local function startQuest(quest)
+    pcall(function()
+        ReplicatedStorage.Remotes.CommF_:InvokeServer("StartQuest", quest, 1)
+    end)
+end
+
+-- Try remote open fruit stock wrapper
+local function openFruitStock()
+    pcall(function()
+        ReplicatedStorage.Remotes.CommF_:InvokeServer("GetFruits")
+    end)
+end
+
+-- ====== GUI (based on your provided base) ======
 local Gui = Instance.new("ScreenGui", game.CoreGui)
 Gui.Name = "BloxFruit_TabGUI"
 Gui.ResetOnSpawn = false
 Gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
--- Toggle Button (corner)
+-- Toggle Button (top-left square rounded with your logo id)
 local ToggleBtn = Instance.new("ImageButton", Gui)
-ToggleBtn.Name = "ToggleBtn"
-ToggleBtn.Size = UDim2.new(0, 40, 0, 40)
-ToggleBtn.Position = UDim2.new(0, 10, 0, 10)
+ToggleBtn.Size = UDim2.new(0, 44, 0, 44)
+ToggleBtn.Position = UDim2.new(0, 12, 0, 12)
 ToggleBtn.Image = "rbxassetid://76955883171909"
-ToggleBtn.BackgroundColor3 = Color3.fromRGB(30,30,30)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(25,25,25)
 ToggleBtn.AutoButtonColor = true
-local corner = Instance.new("UICorner", ToggleBtn); corner.CornerRadius = UDim.new(0,6)
+ToggleBtn.Name = "SangHubToggle"
+local tCorner = Instance.new("UICorner", ToggleBtn); tCorner.CornerRadius = UDim.new(0,8)
 
 -- Main Frame
 local MainFrame = Instance.new("Frame", Gui)
-MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 580, 0, 360)
-MainFrame.Position = UDim2.new(0.5, -290, 0.5, -180)
+MainFrame.Size = UDim2.new(0, 640, 0, 420)
+MainFrame.Position = UDim2.new(0.5, -320, 0.5, -210)
 MainFrame.BackgroundColor3 = Color3.fromRGB(20,20,20)
 MainFrame.Active = true
-MainFrame.Draggable = true
 MainFrame.Visible = false
-Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0,10)
+MainFrame.Name = "MainFrame"
+local mCorner = Instance.new("UICorner", MainFrame); mCorner.CornerRadius = UDim.new(0,10)
 
 -- Logo
 local Logo = Instance.new("ImageLabel", MainFrame)
-Logo.Size = UDim2.new(0,30,0,30)
-Logo.Position = UDim2.new(0,10,0,5)
+Logo.Size = UDim2.new(0, 34, 0, 34)
+Logo.Position = UDim2.new(0, 12, 0, 8)
 Logo.BackgroundTransparency = 1
 Logo.Image = "rbxassetid://76955883171909"
 
--- Tab scroll (top)
+-- Tab strip (scrollable)
 local TabScroll = Instance.new("ScrollingFrame", MainFrame)
-TabScroll.Name = "TabScroll"
-TabScroll.Size = UDim2.new(1, -40, 0, 40)
-TabScroll.Position = UDim2.new(0, 40, 0, 5)
+TabScroll.Size = UDim2.new(1, -60, 0, 44)
+TabScroll.Position = UDim2.new(0, 56, 0, 8)
 TabScroll.BackgroundTransparency = 1
-TabScroll.ScrollBarThickness = 2
+TabScroll.ScrollBarThickness = 6
 TabScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
 TabScroll.AutomaticCanvasSize = Enum.AutomaticSize.X
+local tabLayout = Instance.new("UIListLayout", TabScroll)
+tabLayout.FillDirection = Enum.FillDirection.Horizontal
+tabLayout.Padding = UDim.new(0,6)
 
-local TabLayout = Instance.new("UIListLayout", TabScroll)
-TabLayout.FillDirection = Enum.FillDirection.Horizontal
-TabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
-TabLayout.SortOrder = Enum.SortOrder.LayoutOrder
-TabLayout.Padding = UDim.new(0,5)
+-- Content container
+local ContentHolder = Instance.new("Frame", MainFrame)
+ContentHolder.Size = UDim2.new(1, -20, 1, -70)
+ContentHolder.Position = UDim2.new(0, 10, 0, 60)
+ContentHolder.BackgroundTransparency = 1
 
--- Create tab frames container (content area)
-local ContentContainer = Instance.new("Frame", MainFrame)
-ContentContainer.Name = "ContentContainer"
-ContentContainer.Size = UDim2.new(1, -20, 1, -50)
-ContentContainer.Position = UDim2.new(0,10,0,45)
-ContentContainer.BackgroundTransparency = 1
-
--- Tab names
-local Tabs = {"Tab Status", "Tab General", "Quest & Item", "Race & Gear", "Tab Shop", "Tab Setting", "Mic"}
+local Tabs = {"Status","General","Quest & Item","Race & Gear","Shop","Setting","Mic"}
 local TabFrames = {}
 
-for i, tabName in ipairs(Tabs) do
-    -- tab button
-    local TabBtn = Instance.new("TextButton", TabScroll)
-    TabBtn.Size = UDim2.new(0, 100, 1, 0)
-    TabBtn.Text = tabName
-    TabBtn.Font = Enum.Font.GothamBold
-    TabBtn.TextSize = 13
-    TabBtn.TextColor3 = Color3.fromRGB(255,255,255)
-    TabBtn.BackgroundColor3 = Color3.fromRGB(40,40,40)
-    TabBtn.AutoButtonColor = true
-    Instance.new("UICorner", TabBtn).CornerRadius = UDim.new(0,8)
+for i, name in ipairs(Tabs) do
+    local btn = Instance.new("TextButton", TabScroll)
+    btn.Size = UDim2.new(0, 110, 1, 0)
+    btn.Text = name
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 13
+    btn.BackgroundColor3 = Color3.fromRGB(40,40,40)
+    btn.TextColor3 = Color3.fromRGB(255,255,255)
+    btn.AutoButtonColor = true
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0,8)
 
-    -- tab content (scrollable)
-    local Content = Instance.new("ScrollingFrame", ContentContainer)
-    Content.Name = tabName.."_Content"
-    Content.Size = UDim2.new(1,0,1,0)
-    Content.Position = UDim2.new(0,0,0,0)
-    Content.BackgroundTransparency = 1
-    Content.Visible = false
-    Content.ScrollBarThickness = 6
-    Content.CanvasSize = UDim2.new(0,0,0,0)
-    Content.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    local frame = Instance.new("Frame", ContentHolder)
+    frame.Size = UDim2.new(1,0,1,0)
+    frame.Position = UDim2.new(0,0,0,0)
+    frame.BackgroundTransparency = 1
+    frame.Visible = false
 
-    local layout = Instance.new("UIListLayout", Content)
-    layout.SortOrder = Enum.SortOrder.LayoutOrder
-    layout.Padding = UDim.new(0,8)
-    layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    TabFrames[name] = frame
 
-    TabFrames[tabName] = Content
-
-    TabBtn.MouseButton1Click:Connect(function()
-        -- show only this content (DO NOT toggle main visibility)
-        for k,v in pairs(TabFrames) do v.Visible = false end
-        Content.Visible = true
+    btn.MouseButton1Click:Connect(function()
+        -- do not toggle visibility of mainframe here (user reported). Just switch tabs.
+        for _,f in pairs(TabFrames) do f.Visible = false end
+        frame.Visible = true
     end)
 end
 
--- Default open
-TabFrames["Tab Status"].Visible = true
+TabFrames["Status"].Visible = true
 
--- Toggle animation show/hide
-local isVisible = false
-ToggleBtn.MouseButton1Click:Connect(function()
-    isVisible = not isVisible
-    if isVisible then
-        MainFrame.Size = UDim2.new(0,0,0,0)
-        MainFrame.Visible = true
-        TweenService:Create(MainFrame, TweenInfo.new(0.28, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(0,580,0,360)}):Play()
-    else
-        TweenService:Create(MainFrame, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Size = UDim2.new(0,0,0,0)}):Play()
-        delay(0.24, function() MainFrame.Visible = false MainFrame.Size = UDim2.new(0,580,0,360) end)
-    end
-end)
-
--- ---------- STATUS TAB CONTENT ----------
-local StatusTab = TabFrames["Tab Status"]
+-- ========== STATUS TAB =============
+local StatusTab = TabFrames["Status"]
 
 -- Title centered
-local Title = Instance.new("TextLabel", StatusTab)
-Title.Size = UDim2.new(1, -40, 0, 36)
-Title.Position = UDim2.new(0,20,0,6)
-Title.BackgroundTransparency = 1
-Title.Text = "STATUS"
-Title.Font = Enum.Font.GothamBold
-Title.TextSize = 20
-Title.TextColor3 = Color3.fromRGB(255,255,255)
-Title.TextXAlignment = Enum.TextXAlignment.Center
+local StatusTitle = Instance.new("TextLabel", StatusTab)
+StatusTitle.Size = UDim2.new(1,0,0,40)
+StatusTitle.Position = UDim2.new(0,0,0,0)
+StatusTitle.BackgroundTransparency = 1
+StatusTitle.Font = Enum.Font.GothamBold
+StatusTitle.TextSize = 20
+StatusTitle.TextColor3 = Color3.fromRGB(255,255,255)
+StatusTitle.Text = "Status Checking"
+StatusTitle.TextScaled = false
+StatusTitle.TextXAlignment = Enum.TextXAlignment.Center
 
--- container layout (under title)
-local statusContainer = Instance.new("Frame", StatusTab)
-statusContainer.Size = UDim2.new(1, -40, 1, -56)
-statusContainer.Position = UDim2.new(0,20,0,50)
-statusContainer.BackgroundTransparency = 1
-local statusLayout = Instance.new("UIListLayout", statusContainer)
-statusLayout.Padding = UDim.new(0,8)
-statusLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-statusContainer.AutomaticSize = Enum.AutomaticSize.Y
+-- Two-column area (left/right) scrollables
+local left = Instance.new("ScrollingFrame", StatusTab)
+left.Size = UDim2.new(0.5, -10, 1, -50)
+left.Position = UDim2.new(0,5,0,45)
+left.BackgroundTransparency = 1
+left.ScrollBarThickness = 6
+local leftLayout = Instance.new("UIListLayout", left)
+leftLayout.Padding = UDim.new(0,6)
 
--- Helper: create a labeled status row
-local function createRow(name, default)
-    local row = Instance.new("Frame", statusContainer)
-    row.Size = UDim2.new(1, -20, 0, 28)
-    row.BackgroundTransparency = 1
+local right = Instance.new("ScrollingFrame", StatusTab)
+right.Size = UDim2.new(0.5, -10, 1, -50)
+right.Position = UDim2.new(0.5, 5, 0, 45)
+right.BackgroundTransparency = 1
+right.ScrollBarThickness = 6
+local rightLayout = Instance.new("UIListLayout", right)
+rightLayout.Padding = UDim.new(0,6)
 
-    local lblName = Instance.new("TextLabel", row)
-    lblName.Size = UDim2.new(0.55, 0, 1, 0)
-    lblName.Position = UDim2.new(0,0,0,0)
-    lblName.BackgroundTransparency = 1
-    lblName.Font = Enum.Font.GothamBold
-    lblName.TextSize = 14
-    lblName.TextXAlignment = Enum.TextXAlignment.Left
-    lblName.TextColor3 = Color3.fromRGB(200,200,200)
-    lblName.Text = name
-
-    local lblVal = Instance.new("TextLabel", row)
-    lblVal.Size = UDim2.new(0.45, 0, 1, 0)
-    lblVal.Position = UDim2.new(0.55, 0, 0, 0)
-    lblVal.BackgroundTransparency = 1
-    lblVal.Font = Enum.Font.Gotham
-    lblVal.TextSize = 14
-    lblVal.TextXAlignment = Enum.TextXAlignment.Right
-    lblVal.TextColor3 = Color3.fromRGB(255,255,255)
-    lblVal.Text = default or "—"
-
-    return {Frame = row, NameLabel = lblName, ValueLabel = lblVal}
+-- Boss indicators (Shank, Whitebeard, The Saw)
+local function makeStatusLine(parent, title)
+    local f = Instance.new("Frame", parent)
+    f.Size = UDim2.new(1, -10, 0, 28)
+    f.BackgroundTransparency = 1
+    local tl = Instance.new("TextLabel", f)
+    tl.Size = UDim2.new(0.7, 0, 1, 0)
+    tl.BackgroundTransparency = 1
+    tl.Text = title
+    tl.Font = Enum.Font.Gotham
+    tl.TextColor3 = Color3.fromRGB(220,220,220)
+    tl.TextXAlignment = Enum.TextXAlignment.Left
+    local status = Instance.new("TextLabel", f)
+    status.Size = UDim2.new(0.3, -6, 1, 0)
+    status.Position = UDim2.new(0.7, 6, 0, 0)
+    status.BackgroundTransparency = 1
+    status.Font = Enum.Font.GothamBold
+    status.TextSize = 14
+    status.TextXAlignment = Enum.TextXAlignment.Right
+    return f, tl, status
 end
 
--- Create status rows:
-local statusPlayers = createRow("Players in server:", "0")
-local statusBossShank = createRow("Shank (Red Hair):", "❌")
-local statusBossWhitebeard = createRow("Whitebeard:", "❌")
-local statusBossSaw = createRow("The Saw:", "❌")
-local statusFruits = createRow("FRUIT SPAWN / DROP:", "❌")
-local statusTime = createRow("Script elapsed:", "0s")
-local statusMoon = createRow("Moon:", "❓")
-local statusCheck = createRow("Status:", "Checking")
+local bossShankF, bossShankL, bossShankStatus = makeStatusLine(left, "Shank tóc đỏ:")
+local bossWhiteF, bossWhiteL, bossWhiteStatus = makeStatusLine(left, "Râu trắng:")
+local bossSawF, bossSawL, bossSawStatus = makeStatusLine(left, "The Saw:")
 
--- ---------- Logic: detection helpers ----------
--- Boss patterns (lowercase)
-local BossPatterns = {
-    Shank = {"shank", "shanks"}, -- adjust as needed
-    Whitebeard = {"whitebeard", "white beard", "white-beard"},
-    TheSaw = {"the saw", "saw"}
-}
+local playersCountLabelF, playersCountLabel, playersCountStatus = makeStatusLine(right, "Players in server:")
+local fruitSpawnF, fruitSpawnL, fruitSpawnStatus = makeStatusLine(right, "FRUIT SPAWN / DROP:")
 
-local function findInWorkspaceByPatterns(patterns)
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj and obj.Name then
-            local nm = tostring(obj.Name):lower()
-            for _, pat in ipairs(patterns) do
-                if nm:find(pat:lower()) then
-                    return true, obj
-                end
-            end
-        end
-    end
-    return false, nil
-end
+local timeLabelF, timeLabel, timeStatus = makeStatusLine(right, "Script uptime:")
 
--- Boss check
-local function checkBossSpawn()
-    -- return booleans for each key
-    local shank = findInWorkspaceByPatterns(BossPatterns.Shank)
-    local wb = findInWorkspaceByPatterns(BossPatterns.Whitebeard)
-    local saw = findInWorkspaceByPatterns(BossPatterns.TheSaw)
-    return shank, wb, saw
-end
+local moonLabelF, moonLabel, moonStatus = makeStatusLine(right, "Moon:")
 
--- Fruit detection
-local function detectFruits()
-    local fruits = {}
-    local seen = {}
-
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("Tool") then
-            local nm = tostring(obj.Name)
-            local nmLower = nm:lower()
-            local tip = (""):lower()
-            pcall(function() if obj.ToolTip then tip = tostring(obj.ToolTip):lower() end end)
-            if nmLower:find("fruit") or tip:find("blox") or nmLower:match("^%w+%-?%w*%-?fruit") or nm:match("%w+%-?%w*%-?Fruit") then
-                if not seen[nm] then table.insert(fruits, nm); seen[nm] = true end
-            end
-        end
-    end
-
-    -- Also check for parts/objects named with "Fruit" (rare)
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("BasePart") then
-            local nm = tostring(obj.Name):lower()
-            if nm:find("fruit") and not seen[nm] then
-                table.insert(fruits, obj.Name); seen[obj.Name] = true
-            end
-        end
-    end
-
-    return fruits
-end
-
--- Moon detection (best-effort heuristics)
-local function detectMoon()
-    -- try ReplicatedStorage or workspace lookups
-    local lowerFound = nil
-
-    -- 1) check ReplicatedStorage for "Moon" or "World"
+-- Status updater
+local function updateStatus()
+    -- players
     pcall(function()
-        local rs = game:GetService("ReplicatedStorage")
-        for _,v in pairs(rs:GetDescendants()) do
-            if type(v.Name) == "string" and v.Name:lower():find("moon") then
-                lowerFound = v.Name:lower()
-                return
-            end
-        end
+        local count = #Players:GetPlayers()
+        playersCountStatus.Text = tostring(count)
     end)
 
-    -- 2) check workspace names (parts/models)
-    if not lowerFound then
-        for _,v in pairs(workspace:GetDescendants()) do
-            if type(v.Name) == "string" and v.Name:lower():find("moon") then
-                lowerFound = v.Name:lower()
-                break
-            end
+    -- boss detection heuristics (search workspace for models containing keywords)
+    local foundShank, foundWhite, foundSaw = false,false,false
+    for _,v in pairs(workspace:GetDescendants()) do
+        if v:IsA("Model") or v:IsA("Folder") then
+            local n = v.Name:lower()
+            if n:find("shank") or n:find("shank tóc") or n:find("shank") then foundShank = true end
+            if n:find("whitebeard") or n:find("white beard") or n:find("râu trắng") then foundWhite = true end
+            if n:find("saw") or n:find("the saw") then foundSaw = true end
         end
     end
+    bossShankStatus.Text = foundShank and "✅" or "❌"
+    bossWhiteStatus.Text = foundWhite and "✅" or "❌"
+    bossSawStatus.Text = foundSaw and "✅" or "❌"
 
-    -- 3) fallback: check Lighting / sky texture
-    if not lowerFound then
-        pcall(function()
-            local lighting = game:GetService("Lighting")
-            for _,v in pairs(lighting:GetDescendants()) do
-                if type(v.Name) == "string" and v.Name:lower():find("moon") then
-                    lowerFound = v.Name:lower()
-                    break
-                end
-            end
-        end)
+    -- fruit spawn detection - list names of tools named Fruit
+    local fruitNames = {}
+    for _,obj in pairs(workspace:GetChildren()) do
+        if obj:IsA("Tool") and obj:FindFirstChild("Handle") and string.match(obj.Name:lower(),"fruit") then
+            table.insert(fruitNames, obj.Name)
+        end
     end
-
-    -- Decide real/fake/unknown
-    if lowerFound then
-        if lowerFound:find("real") then return "real" end
-        if lowerFound:find("fake") then return "fake" end
-        -- heuristic: presence of "moon" but no real/fake -> unknown
-        return "unknown"
-    end
-
-    -- Final fallback: try checking ReplicatedStorage "ClientGlobal" patterns (best-effort)
-    -- If nothing found, return nil
-    return nil
-end
-
-local function moonEmojiFor(kind)
-    if not kind then return "❓" end
-    if kind == "real" then return "🌘🌗🌖🌕 (Real Moon)" end
-    if kind == "fake" then return "🌒🌓🌖🌑 (Fake Moon)" end
-    if kind == "unknown" then return "🌙 (Unknown type)" end
-    return "❓"
-end
-
--- Format time elapsed
-local function formatElapsed(secs)
-    local s = math.floor(secs % 60)
-    local m = math.floor((secs/60) % 60)
-    local h = math.floor(secs/3600)
-    if h > 0 then
-        return string.format("%02dh %02dm %02ds", h, m, s)
-    elseif m > 0 then
-        return string.format("%02dm %02ds", m, s)
+    if #fruitNames > 0 then
+        fruitSpawnStatus.Text = table.concat(fruitNames, ", ")
     else
-        return string.format("%02ds", s)
+        fruitSpawnStatus.Text = "❌"
     end
+
+    -- uptime
+    local elapsed = math.floor(tick() - StartTime)
+    local hrs = math.floor(elapsed / 3600); local mins = math.floor((elapsed % 3600)/60); local secs = elapsed % 60
+    timeStatus.Text = string.format("%02d:%02d:%02d", hrs, mins, secs)
+
+    -- moon detection heuristic (best-effort)
+    local moonType = "Unknown"
+    -- try common places: workspace:FindFirstChild("Moon") or ReplicatedStorage:FindFirstChild("Moon")
+    local moonObj = workspace:FindFirstChild("Moon") or ReplicatedStorage:FindFirstChild("Moon")
+    if moonObj and moonObj.Name:lower():find("real") then
+        moonType = "Real 🌘🌗🌖🌕"
+    elseif moonObj and moonObj.Name:lower():find("fake") then
+        moonType = "Fake 🌒🌓🌖🌑"
+    else
+        moonType = "Unknown"
+    end
+    moonStatus.Text = moonType
 end
 
--- ---------- Update loops ----------
--- Frequent update: players & elapsed (every 1s)
+-- update every 120s for boss check and every 1s for uptime
 spawn(function()
-    while true do
-        pcall(function()
-            -- players count
-            local count = #Players:GetPlayers()
-            statusPlayers.ValueLabel.Text = tostring(count)
-
-            -- elapsed
-            local elapsed = tick() - START_TICK
-            statusTime.ValueLabel.Text = formatElapsed(elapsed)
-        end)
-        task.wait(1)
+    while task.wait(1) do
+        pcall(updateStatus)
     end
 end)
 
--- Periodic update: boss & fruits & moon every 120s (2 minutes)
-spawn(function()
-    while true do
-        pcall(function()
-            -- Bosses
-            local s1, s2, s3 = checkBossSpawn()
-            statusBossShank.ValueLabel.Text = s1 and "✅" or "❌"
-            statusBossWhitebeard.ValueLabel.Text = s2 and "✅" or "❌"
-            statusBossSaw.ValueLabel.Text = s3 and "✅" or "❌"
+-- ========== GENERAL TAB (left/right panels) ==========
+local GeneralTab = TabFrames["General"]
 
-            -- Fruits
-            local fruits = detectFruits()
-            if fruits and #fruits > 0 then
-                local short = table.concat(fruits, ", ")
-                if #short > 120 then short = short:sub(1,120) .. "..." end
-                statusFruits.ValueLabel.Text = short
-            else
-                statusFruits.ValueLabel.Text = "❌"
-            end
+-- Left panel = Auto Farm controls (panel styled similar to your request)
+local LeftPanel = Instance.new("Frame", GeneralTab)
+LeftPanel.Size = UDim2.new(0.5, -10, 1, 0)
+LeftPanel.Position = UDim2.new(0, 0, 0, 0)
+LeftPanel.BackgroundTransparency = 1
 
-            -- Moon
-            local moonKind = detectMoon()
-            statusMoon.ValueLabel.Text = moonEmojiFor(moonKind)
+local LeftScroll = Instance.new("ScrollingFrame", LeftPanel)
+LeftScroll.Size = UDim2.new(1,1,1,0)
+LeftScroll.CanvasSize = UDim2.new(0,0,0,400)
+LeftScroll.ScrollBarThickness = 6
+LeftScroll.BackgroundTransparency = 1
+local LeftList = Instance.new("UIListLayout", LeftScroll); LeftList.Padding = UDim.new(0,8)
 
-            -- status checking text (last-check time)
-            statusCheck.ValueLabel.Text = "Checked at: "..os.date("%H:%M:%S")
-        end)
-        task.wait(120) -- 2 minutes
-    end
+-- Right panel = Settings / select weapon
+local RightPanel = Instance.new("Frame", GeneralTab)
+RightPanel.Size = UDim2.new(0.5, -10, 1, 0)
+RightPanel.Position = UDim2.new(0.5, 10, 0, 0)
+RightPanel.BackgroundTransparency = 1
+
+local RightScroll = Instance.new("ScrollingFrame", RightPanel)
+RightScroll.Size = UDim2.new(1,1,1,0)
+RightScroll.CanvasSize = UDim2.new(0,0,0,400)
+RightScroll.ScrollBarThickness = 6
+RightScroll.BackgroundTransparency = 1
+local RightList = Instance.new("UIListLayout", RightScroll); RightList.Padding = UDim.new(0,8)
+
+-- Helper: small section title
+local function sectionTitle(parent, text)
+    local t = Instance.new("TextLabel", parent)
+    t.Size = UDim2.new(1, -12, 0, 28)
+    t.BackgroundTransparency = 1
+    t.Text = text
+    t.Font = Enum.Font.GothamBold
+    t.TextSize = 15
+    t.TextColor3 = Color3.fromRGB(220,220,220)
+    t.TextXAlignment = Enum.TextXAlignment.Left
+    return t
+end
+
+sectionTitle(LeftScroll, "Auto Farm")
+-- Level Farm toggle (rectangle + circle)
+local levelFrame = Instance.new("Frame", LeftScroll)
+levelFrame.Size = UDim2.new(1, -12, 0, 60)
+levelFrame.BackgroundTransparency = 1
+
+local lvlLabel = Instance.new("TextLabel", levelFrame)
+lvlLabel.Size = UDim2.new(0.7,0,1,0)
+lvlLabel.BackgroundTransparency = 1
+lvlLabel.Text = "Level Farm"
+lvlLabel.Font = Enum.Font.Gotham
+lvlLabel.TextSize = 16
+lvlLabel.TextColor3 = Color3.new(1,1,1)
+lvlLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local circle = Instance.new("ImageLabel", levelFrame)
+circle.Size = UDim2.new(0,34,0,34)
+circle.Position = UDim2.new(0.78,0,0.14,0)
+circle.BackgroundTransparency = 1
+circle.Image = "rbxassetid://6031094664" -- empty circle
+local cCorner = Instance.new("UICorner", circle); cCorner.CornerRadius = UDim.new(0,18)
+
+local lvlToggle = false
+local lvlBtn = Instance.new("TextButton", levelFrame)
+lvlBtn.Size = UDim2.new(0.2, -8, 0.9, 0)
+lvlBtn.Position = UDim2.new(0.78, 0, 0.05, 0)
+lvlBtn.Text = ""
+lvlBtn.BackgroundTransparency = 1
+lvlBtn.AutoButtonColor = true
+lvlBtn.MouseButton1Click:Connect(function()
+    lvlToggle = not lvlToggle
+    circle.Image = lvlToggle and "rbxassetid://6031094690" or "rbxassetid://6031094664"
+    getgenv().AutoFarm = lvlToggle
+    -- start auto farm loop is handled below
 end)
 
--- Also run an initial immediate update for better UX
-pcall(function()
-    local s1,s2,s3 = checkBossSpawn()
-    statusBossShank.ValueLabel.Text = s1 and "✅" or "❌"
-    statusBossWhitebeard.ValueLabel.Text = s2 and "✅" or "❌"
-    statusBossSaw.ValueLabel.Text = s3 and "✅" or "❌"
-    local fruits = detectFruits()
-    statusFruits.ValueLabel.Text = (#fruits>0) and table.concat(fruits,", ") or "❌"
-    statusMoon.ValueLabel.Text = moonEmojiFor(detectMoon())
-    statusPlayers.ValueLabel.Text = tostring(#Players:GetPlayers())
-    statusTime.ValueLabel.Text = formatElapsed(tick()-START_TICK)
-    statusCheck.ValueLabel.Text = "Checked at: "..os.date("%H:%M:%S")
-end)
+-- Right panel: select weapon (only Melee / Sword)
+sectionTitle(RightScroll, "Setting Farming")
+local selFrame = Instance.new("Frame", RightScroll)
+selFrame.Size = UDim2.new(1, -12, 0, 80)
+selFrame.BackgroundTransparency = 1
 
--- Keep ContentContainer scrollable visible region adjusted (optional)
-StatusTab.CanvasSize = UDim2.new(0,0,0,0)
-StatusTab.AutomaticCanvasSize = Enum.AutomaticSize.Y
+local selLabel = Instance.new("TextLabel", selFrame)
+selLabel.Size = UDim2.new(1, 0, 0, 24)
+selLabel.Position = UDim2.new(0,0,0,0)
+selLabel.BackgroundTransparency = 1
+selLabel.Text = "Select Weapon: Nothing"
+selLabel.Font = Enum.Font.Gotham
+selLabel.TextSize = 14
+selLabel.TextColor3 = Color3.new(1,1,1)
+selLabel.TextXAlignment = Enum.TextXAlignment.Left
 
--- Done
-print("✅ Status tab upgraded — checks: bosses, fruits, players, elapsed time, moon. Updating every 2 minutes.")
+local selButtons = Instance.new("Frame", selFrame)
+selButtons.Size = UDim2.new(1,0,0,44)
+selButtons.Position = UDim2.new(0,0,0,28)
+selButtons.BackgroundTransparency = 1
+
+local meleeBtn = Instance.new("TextButton", selButtons)
+meleeBtn.Size = UDim2.new(0.48, -6, 1, 0)
+meleeBtn.Position = UDim2.new(0,0,0,0)
+meleeBtn.Text = "Melee 🥋"
+meleeBtn.Font = Enum.Font.GothamBold
+meleeBtn.TextSize = 14
+meleeBtn.BackgroundColor3 = Color3.fromRGB(28,28,28)
+meleeBtn.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", meleeBtn).CornerRadius = UDim.new(0,6)
+
+local sw
