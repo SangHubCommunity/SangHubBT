@@ -509,4 +509,213 @@ meleeBtn.BackgroundColor3 = Color3.fromRGB(28,28,28)
 meleeBtn.TextColor3 = Color3.new(1,1,1)
 Instance.new("UICorner", meleeBtn).CornerRadius = UDim.new(0,6)
 
-local sw
+local swordBtn = Instance.new("TextButton", selButtons)
+swordBtn.Size = UDim2.new(0.48, -6, 1, 0)
+swordBtn.Position = UDim2.new(0.52, 0, 0, 0)
+swordBtn.Text = "Sword ⚔️"
+swordBtn.Font = Enum.Font.GothamBold
+swordBtn.TextSize = 14
+swordBtn.BackgroundColor3 = Color3.fromRGB(28,28,28)
+swordBtn.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", swordBtn).CornerRadius = UDim.new(0,6)
+
+meleeBtn.MouseButton1Click:Connect(function()
+    getgenv().SelectedWeapon = "Melee"
+    selLabel.Text = "Select Weapon: Melee"
+end)
+swordBtn.MouseButton1Click:Connect(function()
+    getgenv().SelectedWeapon = "Sword"
+    selLabel.Text = "Select Weapon: Sword"
+end)
+
+-- Fast Attack toggle
+local fastFrame = Instance.new("Frame", RightScroll)
+fastFrame.Size = UDim2.new(1, -12, 0, 44)
+fastFrame.BackgroundTransparency = 1
+local fastLabel = Instance.new("TextLabel", fastFrame)
+fastLabel.Size = UDim2.new(0.7,0,1,0)
+fastLabel.BackgroundTransparency = 1
+fastLabel.Text = "Fast Attack"
+fastLabel.Font = Enum.Font.Gotham
+fastLabel.TextColor3 = Color3.new(1,1,1)
+fastLabel.TextSize = 14
+fastLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local fastCircle = Instance.new("ImageLabel", fastFrame)
+fastCircle.Size = UDim2.new(0,34,0,34)
+fastCircle.Position = UDim2.new(0.78,0,0.1,0)
+fastCircle.BackgroundTransparency = 1
+fastCircle.Image = "rbxassetid://6031094664"
+local fastBtn = Instance.new("TextButton", fastFrame)
+fastBtn.Size = UDim2.new(0.2, -8, 0.9, 0)
+fastBtn.Position = UDim2.new(0.78, 0, 0.05, 0)
+fastBtn.BackgroundTransparency = 1
+fastBtn.AutoButtonColor = true
+local fastToggle = false
+fastBtn.MouseButton1Click:Connect(function()
+    fastToggle = not fastToggle
+    fastCircle.Image = fastToggle and "rbxassetid://6031094690" or "rbxassetid://6031094664"
+    getgenv().FastAttack = fastToggle
+end)
+
+-- Auto collect fruit toggle (small)
+local collectFrame = Instance.new("Frame", LeftScroll)
+collectFrame.Size = UDim2.new(1,-12,0,44)
+collectFrame.BackgroundTransparency = 1
+local collectLabel = Instance.new("TextLabel", collectFrame)
+collectLabel.Size = UDim2.new(0.7,0,1,0)
+collectLabel.BackgroundTransparency = 1
+collectLabel.Text = "Auto Collect Fruit"
+collectLabel.Font = Enum.Font.Gotham
+collectLabel.TextColor3 = Color3.new(1,1,1)
+collectLabel.TextSize = 14
+collectLabel.TextXAlignment = Enum.TextXAlignment.Left
+local collectCircle = Instance.new("ImageLabel", collectFrame)
+collectCircle.Size = UDim2.new(0,34,0,34)
+collectCircle.Position = UDim2.new(0.78,0,0.1,0)
+collectCircle.BackgroundTransparency = 1
+collectCircle.Image = "rbxassetid://6031094664"
+local collectBtn = Instance.new("TextButton", collectFrame)
+collectBtn.Size = UDim2.new(0.2,-8,0.9,0)
+collectBtn.Position = UDim2.new(0.78,0,0.05,0)
+collectBtn.BackgroundTransparency = 1
+local collectToggle = false
+collectBtn.MouseButton1Click:Connect(function()
+    collectToggle = not collectToggle
+    collectCircle.Image = collectToggle and "rbxassetid://6031094690" or "rbxassetid://6031094664"
+    getgenv().AutoCollectFruit = collectToggle
+end)
+
+-- Toggle mainframe show/hide with scale animation
+local mainVisible = false
+ToggleBtn.MouseButton1Click:Connect(function()
+    mainVisible = not mainVisible
+    if mainVisible then
+        MainFrame.Visible = true
+        MainFrame.Size = UDim2.new(0,0,0,0)
+        TweenService:Create(MainFrame, TweenInfo.new(0.18, Enum.EasingStyle.Sine), {Size = UDim2.new(0,640,0,420)}):Play()
+    else
+        local t = TweenService:Create(MainFrame, TweenInfo.new(0.12, Enum.EasingStyle.Sine), {Size = UDim2.new(0,0,0,0)})
+        t:Play()
+        t.Completed:Wait()
+        MainFrame.Visible = false
+    end
+end)
+
+-- Make content scrollable for all tab frames (simple)
+for _,f in pairs(TabFrames) do
+    local scr = Instance.new("ScrollingFrame", f)
+    scr.Size = UDim2.new(1,0,1,0)
+    scr.BackgroundTransparency = 1
+    scr.ScrollBarThickness = 6
+    scr.Visible = false -- hide the extra scroll frame; we already placed content frames manually for Status & General
+    scr.AutomaticCanvasSize = Enum.AutomaticSize.Y
+end
+
+-- ====== AUTO FARM LOGIC (INTEGRATED) ======
+local function goToIslandForData(d)
+    if not d then return end
+    if IslandPositions[d.Mob] then
+        pcall(function() tweenTo(IslandPositions[d.Mob]); task.wait(0.6) end)
+    end
+end
+
+local function performFarmOnce(data)
+    if not data then return end
+    -- ensure quest
+    pcall(function()
+        -- If player already has quest visible skip, otherwise go to NPC and start
+        -- Attempt to find quest NPC by name (Quest strings used earlier may not correspond to NPC model names, so this is best-effort)
+        -- We'll call StartQuest directly (may require being near NPC in some servers)
+        startQuest(data.Quest)
+    end)
+
+    -- attempt to get mobs and fight
+    while getgenv().AutoFarm do
+        if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then break end
+        local mob = findNearestMobByName(data.Mob)
+        if mob and mob:FindFirstChild("HumanoidRootPart") and mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
+            -- bring mob up, expand hitbox, create platform, equip
+            createFloatingPlatform()
+            pcall(expandHitbox, mob)
+            pcall(function()
+                -- move above mob
+                tweenTo(mob.HumanoidRootPart.CFrame + Vector3.new(0,15,0), 400)
+            end)
+            -- equip
+            pcall(autoEquipSelected)
+            -- fight until mob dead or stop
+            repeat
+                if getgenv().FastAttack then
+                    -- faster clicks
+                    for i=1,3 do sendClick() end
+                else
+                    sendClick()
+                end
+                task.wait(0.06)
+            until not mob.Parent or not getgenv().AutoFarm or (mob:FindFirstChild("Humanoid") and mob.Humanoid.Health <= 0)
+            task.wait(0.2)
+        else
+            -- no mob found, break to allow loop to request quest / wait for spawn
+            break
+        end
+        task.wait(0.5)
+    end
+end
+
+-- farm loop: tries to find best mob for current level and run performFarmOnce
+spawn(function()
+    while task.wait(1) do
+        if getgenv().AutoFarm then
+            pcall(function()
+                local data = getBestForLevel()
+                if not data then return end
+                goToIslandForData(data)
+                task.wait(1)
+                -- ensure auto-equip before starting
+                pcall(autoEquipSelected)
+                -- start fighting loop
+                performFarmOnce(data)
+                -- small wait to prevent tight loop; quest re-evaluation will occur
+                task.wait(1)
+            end)
+        else
+            removeFloatingPlatform()
+            task.wait(1)
+        end
+    end
+end)
+
+-- auto collect fruit loop
+spawn(function()
+    while task.wait(5) do
+        if getgenv().AutoCollectFruit then
+            pcall(function()
+                for _,obj in pairs(workspace:GetChildren()) do
+                    if obj:IsA("Tool") and obj:FindFirstChild("Handle") and string.match(obj.Name:lower(),"fruit") then
+                        pcall(function()
+                            firetouchinterest(LocalPlayer.Character.HumanoidRootPart, obj.Handle, 0)
+                            task.wait(0.05)
+                            firetouchinterest(LocalPlayer.Character.HumanoidRootPart, obj.Handle, 1)
+                        end)
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+-- Auto re-equip if tool lost while farming
+spawn(function()
+    while task.wait(1) do
+        if getgenv().AutoFarm then
+            if LocalPlayer.Character and not LocalPlayer.Character:FindFirstChildOfClass("Tool") then
+                pcall(autoEquipSelected)
+            end
+        end
+    end
+end)
+
+-- Final log
+print("✅ SangHub (Part2) GUI+AutoFarm loaded.")
+
