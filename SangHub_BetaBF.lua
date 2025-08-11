@@ -1,624 +1,639 @@
---==[ SangHub BF Script - Part 1 ]==--
+-- Sang Hub GUI with Player ESP (blue) & Fruit ESP (yellow)
+-- Paste to StarterPlayerScripts (LocalScript)
 
--- Anti AFK
-for i,v in pairs(getconnections(game.Players.LocalPlayer.Idled)) do
-    pcall(function() v:Disable() end)
-end
+repeat task.wait() until game:IsLoaded()
 
 -- Services
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
-local VirtualInput = game:GetService("VirtualInputManager")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+
 local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
--- Config / State
-local StartTime = tick()
-getgenv().AutoFarm = false
-getgenv().SelectedWeapon = "None"
-getgenv().FastAttack = false
-
--- Island Positions & LevelToMob for Sea 1
-local IslandPositions = {
-    ["Bandit"] = CFrame.new(1060, 16, 1547),
-    ["Monkey"] = CFrame.new(-1603, 65, 150),
-    ["Gorilla"] = CFrame.new(-1337, 40, -30),
-    ["Pirate"] = CFrame.new(-4870, 20, 4323),
-    ["Brute"] = CFrame.new(-5020, 20, 4408),
-    ["Desert Bandit"] = CFrame.new(932, 7, 4486),
-    ["Desert Officer"] = CFrame.new(1572, 10, 4373),
-    ["Snow Bandit"] = CFrame.new(1389, 87, -1297),
-    ["Snowman"] = CFrame.new(1206, 144, -1326),
-    ["Chief Petty Officer"] = CFrame.new(-4881, 20, 3914),
-    ["Sky Bandit"] = CFrame.new(-4950, 295, -2886),
-    ["Dark Master"] = CFrame.new(-5220, 430, -2272),
-    ["Prisoner"] = CFrame.new(5100, 100, 4740),
-    ["Dangerous Prisoner"] = CFrame.new(5200, 100, 4740),
-    ["Toga Warrior"] = CFrame.new(-1790, 560, -2748),
-    ["Gladiator"] = CFrame.new(-1295, 470, -3021),
-    ["Military Soldier"] = CFrame.new(-5400, 90, 5800),
-    ["Military Spy"] = CFrame.new(-5800, 90, 6000),
-    ["Fishman Warrior"] = CFrame.new(60800, 20, 1500),
-    ["Fishman Commando"] = CFrame.new(61000, 20, 1800),
-    ["Wysper"] = CFrame.new(62000, 20, 1600),
-    ["Magma Admiral"] = CFrame.new(-5000, 80, 8500),
-    ["Arctic Warrior"] = CFrame.new(5600, 20, -6500),
-    ["Snow Lurker"] = CFrame.new(5800, 30, -6700),
-    ["Cyborg"] = CFrame.new(6200, 20, -7200)
-}
-
-local LevelToMob = {
-    {LevelReq=1, Mob="Bandit", Quest="BanditQuest1"},
-    {LevelReq=15, Mob="Monkey", Quest="JungleQuest"},
-    {LevelReq=20, Mob="Gorilla", Quest="JungleQuest"},
-    {LevelReq=30, Mob="Pirate", Quest="BuggyQuest1"},
-    {LevelReq=40, Mob="Brute", Quest="BuggyQuest1"},
-    {LevelReq=60, Mob="Desert Bandit", Quest="DesertQuest"},
-    {LevelReq=75, Mob="Desert Officer", Quest="DesertQuest"},
-    {LevelReq=90, Mob="Snow Bandit", Quest="SnowQuest"},
-    {LevelReq=105, Mob="Snowman", Quest="SnowQuest"},
-    {LevelReq=120, Mob="Chief Petty Officer", Quest="MarineQuest2"},
-    {LevelReq=130, Mob="Sky Bandit", Quest="SkyQuest"},
-    {LevelReq=145, Mob="Dark Master", Quest="SkyQuest"},
-    {LevelReq=190, Mob="Prisoner", Quest="PrisonerQuest"},
-    {LevelReq=210, Mob="Dangerous Prisoner", Quest="PrisonerQuest"},
-    {LevelReq=250, Mob="Toga Warrior", Quest="ColosseumQuest"},
-    {LevelReq=275, Mob="Gladiator", Quest="ColosseumQuest"},
-    {LevelReq=300, Mob="Military Soldier", Quest="MagmaQuest"},
-    {LevelReq=325, Mob="Military Spy", Quest="MagmaQuest"},
-    {LevelReq=375, Mob="Fishman Warrior", Quest="FishmanQuest"},
-    {LevelReq=400, Mob="Fishman Commando", Quest="FishmanQuest"},
-    {LevelReq=450, Mob="Wysper", Quest="SkyExp1"},
-    {LevelReq=475, Mob="Magma Admiral", Quest="SkyExp1"},
-    {LevelReq=525, Mob="Arctic Warrior", Quest="FrostQuest"},
-    {LevelReq=550, Mob="Snow Lurker", Quest="FrostQuest"},
-    {LevelReq=625, Mob="Cyborg", Quest="CyborQuest"}
-}
-
--- Utility
-local function getBestForLevel()
-    local lvl = 0
-    pcall(function() lvl = LocalPlayer.Data.Level.Value end)
-    local best
-    for _,d in ipairs(LevelToMob) do
-        if lvl >= d.LevelReq then best = d end
+-- Helpers
+local function new(class, props)
+    local o = Instance.new(class)
+    if props then
+        for k, v in pairs(props) do o[k] = v end
     end
-    return best
+    pcall(function() if o:IsA("GuiObject") then o.AutoLocalize = false end end)
+    return o
 end
 
-local function tweenTo(cf, speed)
-    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
-    speed = speed or 250
-    local hrp = LocalPlayer.Character.HumanoidRootPart
-    local dist = (hrp.Position - cf.Position).Magnitude
-    local t = TweenService:Create(hrp, TweenInfo.new(dist/speed, Enum.EasingStyle.Linear), {CFrame = cf})
-    t:Play()
-    t.Completed:Wait()
+-- Config / Colors (kept from your chosen style)
+local BLUE = Color3.fromRGB(0,140,255)
+local YELLOW = Color3.fromRGB(235,190,60)
+local TEXT_COLOR = Color3.fromRGB(230,230,230)
+local BG_COLOR = Color3.fromRGB(30,30,30)
+local TAB_COLOR = Color3.fromRGB(46,46,46)
+local TAB_HIGHLIGHT = Color3.fromRGB(0,110,200)
+local TOGGLE_ICON = "rbxassetid://92088814301938"
+local GUI_W, GUI_H = 500, 350
+
+-- Remove old gui if exists
+pcall(function()
+    local old = PlayerGui:FindFirstChild("Sang Hub GUI")
+    if old then old:Destroy() end
+end)
+
+-- Root ScreenGui
+local screenGui = new("ScreenGui", {
+    Name = "Sang Hub GUI",
+    Parent = PlayerGui,
+    ResetOnSpawn = false,
+    ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+})
+
+-- Top-left toggle icon
+local ToggleBtn = new("ImageButton", {
+    Parent = screenGui,
+    Size = UDim2.new(0,50,0,50),
+    Position = UDim2.new(0,10,0,10),
+    BackgroundColor3 = BG_COLOR,
+    Image = TOGGLE_ICON,
+    AutoButtonColor = false
+})
+new("UICorner", {Parent = ToggleBtn, CornerRadius = UDim.new(0,8)})
+new("UIStroke", {Parent = ToggleBtn, Color = BLUE, Thickness = 2})
+
+-- Main window
+local MainFrame = new("Frame", {
+    Parent = screenGui,
+    Size = UDim2.fromOffset(GUI_W, GUI_H),
+    Position = UDim2.new(0.5, -GUI_W/2, 0.5, -GUI_H/2),
+    BackgroundColor3 = BG_COLOR,
+    BorderSizePixel = 0,
+    ClipsDescendants = true
+})
+new("UICorner", {Parent = MainFrame, CornerRadius = UDim.new(0,8)})
+new("UIStroke", {Parent = MainFrame, Color = BLUE, Thickness = 2})
+
+-- Header (transparent)
+local Header = new("Frame", {Parent = MainFrame, Size = UDim2.new(1,0,0,50), BackgroundTransparency = 1})
+
+-- TabScroll
+local TabScroll = new("ScrollingFrame", {
+    Parent = Header,
+    Size = UDim2.new(1, -10, 1, 0),
+    Position = UDim2.new(0,5,0,0),
+    BackgroundTransparency = 1,
+    ScrollBarThickness = 6,
+    ClipsDescendants = true,
+    HorizontalScrollBarInset = Enum.ScrollBarInset.Always,
+    ScrollingDirection = Enum.ScrollingDirection.X
+})
+local TabList = new("UIListLayout", {Parent = TabScroll, FillDirection = Enum.FillDirection.Horizontal, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0,8)})
+TabList.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+-- Content area
+local ContentFrame = new("Frame", {Parent = MainFrame, Size = UDim2.new(1, -10, 1, -60), Position = UDim2.new(0,5,0,55), BackgroundTransparency = 1})
+
+-- Tabs
+local tabNames = {"Status","Main","Item","Combat","Race & Gear","Shop & Mics"}
+local tabButtons = {}
+local tabPages = {}
+
+local function highlightTab(idx)
+    for i, b in ipairs(tabButtons) do
+        local col = (i==idx) and TAB_HIGHLIGHT or TAB_COLOR
+        TweenService:Create(b, TweenInfo.new(0.18), {BackgroundColor3 = col}):Play()
+    end
 end
 
-local function sendClick()
-    pcall(function()
-        VirtualInput:SendMouseButtonEvent(0,0,0,true,game,0)
-        task.wait()
-        VirtualInput:SendMouseButtonEvent(0,0,0,false,game,0)
+local function switchTab(idx)
+    for i, p in ipairs(tabPages) do p.Visible = (i==idx) end
+    highlightTab(idx)
+end
+
+-- make tabs + pages
+for i, name in ipairs(tabNames) do
+    local tabBtn = new("TextButton", {
+        Parent = TabScroll,
+        Size = UDim2.new(0,90,0,42),
+        BackgroundColor3 = TAB_COLOR,
+        BorderSizePixel = 0,
+        Text = name,
+        Font = Enum.Font.GothamBold,
+        TextSize = 14,
+        TextColor3 = TEXT_COLOR,
+        AutoButtonColor = false
+    })
+    tabBtn.AutoLocalize = false
+    new("UICorner", {Parent = tabBtn, CornerRadius = UDim.new(0,6)})
+    new("UIStroke", {Parent = tabBtn, Color = BLUE, Thickness = 1})
+    table.insert(tabButtons, tabBtn)
+
+    local page = new("ScrollingFrame", {
+        Parent = ContentFrame,
+        Size = UDim2.new(1,0,1,0),
+        BackgroundTransparency = 1,
+        Visible = false,
+        ScrollBarThickness = 6
+    })
+    new("UIListLayout", {Parent = page, FillDirection = Enum.FillDirection.Vertical, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0,8)})
+    -- add padding so content not flush to left
+    new("UIPadding", {Parent = page, PaddingLeft = UDim.new(0,8), PaddingRight = UDim.new(0,8), PaddingTop = UDim.new(0,6)})
+    table.insert(tabPages, page)
+
+    tabBtn.MouseButton1Click:Connect(function() switchTab(i) end)
+end
+
+-- ensure canvas
+RunService.Heartbeat:Wait()
+local function updateCanvas()
+    local total = 0
+    for _, b in ipairs(tabButtons) do
+        total = total + (b.AbsoluteSize.X + TabList.Padding.Offset)
+    end
+    TabScroll.CanvasSize = UDim2.new(0, math.max(total + 12, TabScroll.AbsoluteSize.X), 0, 0)
+end
+updateCanvas()
+TabList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCanvas)
+
+-- open first tab
+switchTab(1)
+
+-- Helper: create toggles used in various pages
+local function createToggleStyle(parent, labelText, initialState, onToggle)
+    local btn = new("TextButton", {
+        Parent = parent,
+        Size = UDim2.new(1, -12, 0, 36),
+        BackgroundColor3 = TAB_COLOR,
+        BorderSizePixel = 0,
+        Text = "",
+        AutoButtonColor = false
+    })
+    new("UICorner", {Parent = btn, CornerRadius = UDim.new(0,6)})
+    new("UIStroke", {Parent = btn, Color = BLUE, Thickness = 1})
+
+    local label = new("TextLabel", {
+        Parent = btn,
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0,10,0,0),
+        Size = UDim2.new(1, -50, 1, 0),
+        Text = labelText,
+        Font = Enum.Font.Gotham,
+        TextSize = 14,
+        TextColor3 = TEXT_COLOR,
+        TextXAlignment = Enum.TextXAlignment.Left
+    })
+    label.AutoLocalize = false
+
+    local circle = new("Frame", {
+        Parent = btn,
+        Size = UDim2.new(0,20,0,20),
+        Position = UDim2.new(1, -28, 0.5, -10),
+        BackgroundColor3 = (initialState and BLUE) or Color3.fromRGB(100,100,100)
+    })
+    new("UICorner", {Parent = circle, CornerRadius = UDim.new(1,0)})
+    local stroke = new("UIStroke", {Parent = circle, Color = (initialState and BLUE) or Color3.fromRGB(150,150,150), Thickness = 1.6})
+
+    local state = initialState or false
+    btn.MouseButton1Click:Connect(function()
+        state = not state
+        -- animate color change
+        TweenService:Create(circle, TweenInfo.new(0.18, Enum.EasingStyle.Quad), {BackgroundColor3 = (state and BLUE) or Color3.fromRGB(100,100,100)}):Play()
+        stroke.Color = (state and BLUE) or Color3.fromRGB(150,150,150)
+        if onToggle then
+            pcall(function() onToggle(state) end)
+        end
     end)
+    return btn, function() return state end
 end
 
-local function findNearestMobByName(name)
-    local closest, dist = nil, math.huge
-    for _,m in pairs(workspace:FindFirstChild("Enemies") and workspace.Enemies:GetChildren() or {}) do
-        if m:FindFirstChild("HumanoidRootPart") and m:FindFirstChild("Humanoid") and m.Humanoid.Health > 0 and string.find(m.Name, name) then
-            local d = (m.HumanoidRootPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
-            if d < dist then dist = d; closest = m end
-        end
+-- === Build Shop & Mics page content (right side ESP title + toggles) ===
+local shopIndex = nil
+for i,name in ipairs(tabNames) do if name == "Shop & Mics" then shopIndex = i break end end
+if not shopIndex then shopIndex = #tabNames end
+local shopPage = tabPages[shopIndex]
+
+-- container frame inside page to allow horizontal split
+local shopContainer = new("Frame", {Parent = shopPage, Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1})
+new("UIListLayout", {Parent = shopContainer, FillDirection = Enum.FillDirection.Horizontal, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0,8)})
+
+local leftFrame = new("Frame", {Parent = shopContainer, Size = UDim2.new(0.5, -6, 1, 0), BackgroundTransparency = 1})
+new("UIListLayout", {Parent = leftFrame, FillDirection = Enum.FillDirection.Vertical, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0,8)})
+new("UIPadding", {Parent = leftFrame, PaddingLeft = UDim.new(0,8), PaddingRight = UDim.new(0,8)})
+
+local rightFrame = new("Frame", {Parent = shopContainer, Size = UDim2.new(0.5, -6, 1, 0), BackgroundTransparency = 1})
+new("UIListLayout", {Parent = rightFrame, FillDirection = Enum.FillDirection.Vertical, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0,8)})
+new("UIPadding", {Parent = rightFrame, PaddingLeft = UDim.new(0,8), PaddingRight = UDim.new(0,8)})
+
+-- Title "ESP" centered for right column
+local espTitle = new("TextLabel", {
+    Parent = rightFrame,
+    BackgroundTransparency = 1,
+    Size = UDim2.new(1,0,0,22),
+    Text = "ESP",
+    Font = Enum.Font.GothamBold,
+    TextSize = 16,
+    TextColor3 = BLUE,
+    TextXAlignment = Enum.TextXAlignment.Center
+})
+
+-- Setup getgenv flags default
+pcall(function()
+    if getgenv then
+        getgenv().PlayerESP = getgenv().PlayerESP or false
+        getgenv().FruitsESP = getgenv().FruitsESP or false
     end
-    return closest
-end
+end)
 
-local function createFloatingPlatform()
-    if workspace:FindFirstChild("SangHub_FloatBlock") then return end
-    local p = Instance.new("Part", workspace)
-    p.Name = "SangHub_FloatBlock"
-    p.Anchored = true
-    p.CanCollide = true
-    p.Size = Vector3.new(10,1,10)
-    p.Transparency = 1
-    p.Position = LocalPlayer.Character.HumanoidRootPart.Position - Vector3.new(0,3.5,0)
-end
+-- ESP storage
+local playerESPs = {}   -- player -> BillboardGui
+local fruitESPs = {}    -- instance -> BillboardGui
 
-local function removeFloatingPlatform()
-    if workspace:FindFirstChild("SangHub_FloatBlock") then
-        workspace.SangHub_FloatBlock:Destroy()
+-- CAMERA reference
+local camera = Workspace.CurrentCamera
+
+-- Utility: has line-of-sight (no wall between camera and target)
+local function hasLoS(targetPosition)
+    local origin = camera.CFrame.Position
+    local dir = (targetPosition - origin)
+    local rayParams = RaycastParams.new()
+    rayParams.FilterDescendantsInstances = {LocalPlayer.Character}
+    rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+    rayParams.IgnoreWater = true
+    local res = Workspace:Raycast(origin, dir.Unit * math.min(dir.Magnitude, 10000), rayParams)
+    if not res then return true end
+    -- allow if hit part is descendant of targetPosition's parent (e.g., target's part)
+    if res.Instance and (res.Instance:IsDescendantOf(targetPosition.Parent)) then
+        return true
     end
+    return false
 end
 
-local function expandHitbox(m)
-    for _,part in ipairs(m:GetChildren()) do
-        if part:IsA("BasePart") then
-            part.Size = Vector3.new(60,60,60)
-            part.Transparency = 0.6
-            part.CanCollide = false
-            part.Material = Enum.Material.Neon
-        end
-    end
-end
+-- Create/Remove player ESP
+local function createPlayerESP(plr)
+    if not plr or not plr.Character then return end
+    local chr = plr.Character
+    local root = chr:FindFirstChild("HumanoidRootPart") or chr:FindFirstChild("Humanoid") and chr.Humanoid.RootPart
+    if not root then return end
 
-local function autoEquipSelected()
-    if getgenv().SelectedWeapon == "Melee" then
-        for _,v in pairs(LocalPlayer.Backpack:GetChildren()) do
-            if v:IsA("Tool") and (v.ToolTip == "Melee" or v.Name:lower():find("combat") or v.Name:lower():find("karate")) then
-                LocalPlayer.Character.Humanoid:EquipTool(v) return
-            end
-        end
-    elseif getgenv().SelectedWeapon == "Sword" then
-        for _,v in pairs(LocalPlayer.Backpack:GetChildren()) do
-            if v:IsA("Tool") and (v.ToolTip == "Sword" or v.Name:lower():find("katana") or v.Name:lower():find("sword") or v.Name:lower():find("blade")) then
-                LocalPlayer.Character.Humanoid:EquipTool(v) return
-            end
-        end
-    end
-end
---==[ SangHub BF Script - Part 2 (GUI + Tabs + Status) ]==--
+    -- avoid duplicates
+    if playerESPs[plr] and playerESPs[plr].Parent then return end
 
--- GUI base (dựa trên bản bạn chốt)
-local Gui = Instance.new("ScreenGui", game.CoreGui)
-Gui.Name = "BloxFruit_TabGUI"
-Gui.ResetOnSpawn = false
-Gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    local bg = Instance.new("BillboardGui")
+    bg.Name = "SangPlayerESP"
+    bg.Adornee = root
+    bg.Size = UDim2.new(0,140,0,40)
+    bg.StudsOffset = Vector3.new(0, 2.6, 0)
+    bg.AlwaysOnTop = true
+    bg.Parent = PlayerGui
 
--- Toggle Button (top-left)
-local ToggleBtn = Instance.new("ImageButton", Gui)
-ToggleBtn.Size = UDim2.new(0, 44, 0, 44)
-ToggleBtn.Position = UDim2.new(0, 12, 0, 12)
-ToggleBtn.Image = "rbxassetid://76955883171909" -- your logo id
-ToggleBtn.BackgroundColor3 = Color3.fromRGB(25,25,25)
-ToggleBtn.AutoButtonColor = true
-ToggleBtn.Name = "SangHubToggle"
-local tCorner = Instance.new("UICorner", ToggleBtn); tCorner.CornerRadius = UDim.new(0,8)
-
--- Main Frame
-local MainFrame = Instance.new("Frame", Gui)
-MainFrame.Size = UDim2.new(0, 640, 0, 420)
-MainFrame.Position = UDim2.new(0.5, -320, 0.5, -210)
-MainFrame.BackgroundColor3 = Color3.fromRGB(20,20,20)
-MainFrame.Active = true
-MainFrame.Visible = false
-MainFrame.Name = "MainFrame"
-local mCorner = Instance.new("UICorner", MainFrame); mCorner.CornerRadius = UDim.new(0,10)
-
--- Logo
-local Logo = Instance.new("ImageLabel", MainFrame)
-Logo.Size = UDim2.new(0, 34, 0, 34)
-Logo.Position = UDim2.new(0, 12, 0, 8)
-Logo.BackgroundTransparency = 1
-Logo.Image = "rbxassetid://76955883171909"
-
--- Tab strip (scrollable)
-local TabScroll = Instance.new("ScrollingFrame", MainFrame)
-TabScroll.Size = UDim2.new(1, -60, 0, 44)
-TabScroll.Position = UDim2.new(0, 56, 0, 8)
-TabScroll.BackgroundTransparency = 1
-TabScroll.ScrollBarThickness = 6
-TabScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-TabScroll.AutomaticCanvasSize = Enum.AutomaticSize.X
-local tabLayout = Instance.new("UIListLayout", TabScroll)
-tabLayout.FillDirection = Enum.FillDirection.Horizontal
-tabLayout.Padding = UDim.new(0,6)
-
--- Content container
-local ContentHolder = Instance.new("Frame", MainFrame)
-ContentHolder.Size = UDim2.new(1, -20, 1, -70)
-ContentHolder.Position = UDim2.new(0, 10, 0, 60)
-ContentHolder.BackgroundTransparency = 1
-
-local Tabs = {"Status","General","Quest & Item","Race & Gear","Shop","Setting","Mic"}
-local TabFrames = {}
-
-for i, name in ipairs(Tabs) do
-    local btn = Instance.new("TextButton", TabScroll)
-    btn.Size = UDim2.new(0, 110, 1, 0)
-    btn.Text = name
-    btn.Font = Enum.Font.GothamBold
-    btn.TextSize = 13
-    btn.BackgroundColor3 = Color3.fromRGB(40,40,40)
-    btn.TextColor3 = Color3.fromRGB(255,255,255)
-    btn.AutoButtonColor = true
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0,8)
-
-    local frame = Instance.new("Frame", ContentHolder)
+    local frame = Instance.new("Frame", bg)
     frame.Size = UDim2.new(1,0,1,0)
-    frame.Position = UDim2.new(0,0,0,0)
-    frame.BackgroundTransparency = 1
-    frame.Visible = false
+    frame.BackgroundTransparency = 0.35
+    frame.BackgroundColor3 = Color3.fromRGB(10,10,10)
+    frame.BorderSizePixel = 0
+    frame.ClipsDescendants = true
 
-    TabFrames[name] = frame
+    local nameLabel = Instance.new("TextLabel", bg)
+    nameLabel.Size = UDim2.new(1, -4, 0.5, -2)
+    nameLabel.Position = UDim2.new(0,2,0,2)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.TextColor3 = BLUE
+    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.TextSize = 14
+    nameLabel.Text = plr.Name
+    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
 
-    btn.MouseButton1Click:Connect(function()
-        -- only switch tabs; do NOT hide MainFrame
-        for _,f in pairs(TabFrames) do f.Visible = false end
-        frame.Visible = true
-    end)
+    local distLabel = Instance.new("TextLabel", bg)
+    distLabel.Size = UDim2.new(1, -4, 0.5, -2)
+    distLabel.Position = UDim2.new(0,2,0.5,0)
+    distLabel.BackgroundTransparency = 1
+    distLabel.TextColor3 = TEXT_COLOR
+    distLabel.Font = Enum.Font.Gotham
+    distLabel.TextSize = 12
+    distLabel.Text = ""
+    distLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+    playerESPs[plr] = {gui = bg, nameLabel = nameLabel, distLabel = distLabel, root = root}
 end
 
-TabFrames["Status"].Visible = true
-
--- ===== STATUS TAB UI =====
-local StatusTab = TabFrames["Status"]
-
--- Title centered
-local StatusTitle = Instance.new("TextLabel", StatusTab)
-StatusTitle.Size = UDim2.new(1,0,0,40)
-StatusTitle.Position = UDim2.new(0,0,0,0)
-StatusTitle.BackgroundTransparency = 1
-StatusTitle.Font = Enum.Font.GothamBold
-StatusTitle.TextSize = 20
-StatusTitle.TextColor3 = Color3.fromRGB(255,255,255)
-StatusTitle.Text = "Status Checking"
-StatusTitle.TextXAlignment = Enum.TextXAlignment.Center
-
--- Two-column scrolls
-local left = Instance.new("ScrollingFrame", StatusTab)
-left.Size = UDim2.new(0.5, -10, 1, -50)
-left.Position = UDim2.new(0,5,0,45)
-left.BackgroundTransparency = 1
-left.ScrollBarThickness = 6
-local leftLayout = Instance.new("UIListLayout", left)
-leftLayout.Padding = UDim.new(0,6)
-
-local right = Instance.new("ScrollingFrame", StatusTab)
-right.Size = UDim2.new(0.5, -10, 1, -50)
-right.Position = UDim2.new(0.5, 5, 0, 45)
-right.BackgroundTransparency = 1
-right.ScrollBarThickness = 6
-local rightLayout = Instance.new("UIListLayout", right)
-rightLayout.Padding = UDim.new(0,6)
-
--- helper to create line
-local function makeStatusLine(parent, title)
-    local f = Instance.new("Frame", parent)
-    f.Size = UDim2.new(1, -10, 0, 28)
-    f.BackgroundTransparency = 1
-    local tl = Instance.new("TextLabel", f)
-    tl.Size = UDim2.new(0.7, 0, 1, 0)
-    tl.BackgroundTransparency = 1
-    tl.Text = title
-    tl.Font = Enum.Font.Gotham
-    tl.TextColor3 = Color3.fromRGB(220,220,220)
-    tl.TextXAlignment = Enum.TextXAlignment.Left
-    local status = Instance.new("TextLabel", f)
-    status.Size = UDim2.new(0.3, -6, 1, 0)
-    status.Position = UDim2.new(0.7, 6, 0, 0)
-    status.BackgroundTransparency = 1
-    status.Font = Enum.Font.GothamBold
-    status.TextSize = 14
-    status.TextXAlignment = Enum.TextXAlignment.Right
-    status.Text = "..."
-    return f, tl, status
+local function removePlayerESP(plr)
+    local data = playerESPs[plr]
+    if data and data.gui and data.gui.Parent then
+        data.gui:Destroy()
+    end
+    playerESPs[plr] = nil
 end
 
--- Boss lines
-local b1f,b1l,b1s = makeStatusLine(left, "Shank tóc đỏ:")
-local b2f,b2l,b2s = makeStatusLine(left, "Râu trắng:")
-local b3f,b3l,b3s = makeStatusLine(left, "The Saw:")
+-- Fruit ESP creation/removal
+local function createFruitESP(item)
+    if not item or not item:IsA("Tool") then return end
+    if fruitESPs[item] and fruitESPs[item].Parent then return end
+    local handle = item:FindFirstChild("Handle") or item:FindFirstChildWhichIsA("BasePart")
+    if not handle then return end
 
--- Right side lines
-local pcf, pcl, pcs = makeStatusLine(right, "Players in server:")
-local ff, fl, fs = makeStatusLine(right, "FRUIT SPAWN / DROP:")
-local tf, tlbl, tsLbl = makeStatusLine(right, "Script uptime:")
-local mf, mll, ms = makeStatusLine(right, "Moon:")
+    local bg = Instance.new("BillboardGui")
+    bg.Name = "SangFruitESP"
+    bg.Adornee = handle
+    bg.Size = UDim2.new(0,120,0,30)
+    bg.StudsOffset = Vector3.new(0, 1.5, 0)
+    bg.AlwaysOnTop = true
+    bg.Parent = PlayerGui
 
--- Status update function (runs periodically)
-local StartTime = tick()
-local function updateStatus()
-    -- players
-    pcall(function()
-        local count = #Players:GetPlayers()
-        pcs.Text = tostring(count)
-    end)
+    local txt = Instance.new("TextLabel", bg)
+    txt.Size = UDim2.new(1,0,1,0)
+    txt.BackgroundTransparency = 1
+    txt.TextColor3 = YELLOW
+    txt.Font = Enum.Font.GothamBold
+    txt.TextSize = 14
+    txt.Text = item.Name
+    txt.TextScaled = false
+    txt.TextWrapped = false
+    txt.TextXAlignment = Enum.TextXAlignment.Center
+    txt.TextYAlignment = Enum.TextYAlignment.Center
 
-    -- boss detection (search workspace names)
-    local foundShank, foundWhite, foundSaw = false,false,false
-    for _,v in pairs(workspace:GetDescendants()) do
-        if v:IsA("Model") or v:IsA("Folder") then
-            local n = v.Name:lower()
-            if n:find("shank") then foundShank = true end
-            if n:find("whitebeard") or n:find("râu trắng") or n:find("white beard") then foundWhite = true end
-            if n:find("saw") or n:find("the saw") then foundSaw = true end
-        end
-    end
-    b1s.Text = foundShank and "✅" or "❌"
-    b2s.Text = foundWhite and "✅" or "❌"
-    b3s.Text = foundSaw and "✅" or "❌"
-
-    -- fruit detection (tools in workspace containing "fruit")
-    local fruitNames = {}
-    for _,obj in pairs(workspace:GetChildren()) do
-        if obj:IsA("Tool") and obj:FindFirstChild("Handle") and string.match(obj.Name:lower(),"fruit") then
-            table.insert(fruitNames, obj.Name)
-        end
-    end
-    if #fruitNames > 0 then fs.Text = table.concat(fruitNames, ", ") else fs.Text = "❌" end
-
-    -- uptime
-    local elapsed = math.floor(tick() - StartTime)
-    local hrs = math.floor(elapsed / 3600); local mins = math.floor((elapsed % 3600)/60); local secs = elapsed % 60
-    tsLbl.Text = string.format("%02d:%02d:%02d", hrs, mins, secs)
-
-    -- moon detection (best-effort)
-    local moonType = "Unknown"
-    local moonObj = workspace:FindFirstChild("Moon") or ReplicatedStorage:FindFirstChild("Moon")
-    if moonObj and moonObj.Name:lower():find("real") then
-        moonType = "Real 🌘🌗🌖🌕"
-    elseif moonObj and moonObj.Name:lower():find("fake") then
-        moonType = "Fake 🌒🌓🌖🌑"
-    else
-        -- fallback: try searching terrain/lighting name markers
-        if workspace:FindFirstChild("MoonSurface") then moonType = "Real 🌘🌗🌖🌕" end
-    end
-    ms.Text = moonType
+    fruitESPs[item] = bg
 end
 
--- small loop: update every 1s (uptime) but boss check is cheap anyway
-spawn(function()
-    while task.wait(1) do
-        pcall(updateStatus)
+local function removeFruitESP(item)
+    if fruitESPs[item] and fruitESPs[item].Parent then
+        fruitESPs[item]:Destroy()
     end
-end)
-
--- Toggle visibility with a zoom animation
-local tweenService = game:GetService("TweenService")
-ToggleBtn.MouseButton1Click:Connect(function()
-    local show = not MainFrame.Visible
-    if show then
-        MainFrame.Scale = 0 -- not real property but we'll emulate: set initial small then tween size/position
-        MainFrame.Size = UDim2.new(0,1,0,1)
-        MainFrame.Visible = true
-        local goal = {Size = UDim2.new(0,640,0,420)}
-        local t = TweenInfo.new(0.18, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
-        tweenService:Create(MainFrame, t, goal):Play()
-    else
-        local goal = {Size = UDim2.new(0,1,0,1)}
-        local t = TweenInfo.new(0.12, Enum.EasingStyle.Sine, Enum.EasingDirection.In)
-        local tw = tweenService:Create(MainFrame, t, goal)
-        tw:Play()
-        tw.Completed:Wait()
-        MainFrame.Visible = false
-        MainFrame.Size = UDim2.new(0,640,0,420)
-    end
-end)
-
--- End of Part 2
-print("SangHub: Part 2 (GUI & Status) loaded")
---==[ SangHub BF Script - Part 3 (Tab General) ]==--
-
-local GeneralTab = TabFrames["General"]
-
--- Panel Left = Auto Farm
-local LeftPanel = Instance.new("Frame", GeneralTab)
-LeftPanel.Size = UDim2.new(0.48, -6, 1, 0)
-LeftPanel.Position = UDim2.new(0, 0, 0, 0)
-LeftPanel.BackgroundTransparency = 1
-
-local LeftScroll = Instance.new("ScrollingFrame", LeftPanel)
-LeftScroll.Size = UDim2.new(1, 0, 1, 0)
-LeftScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-LeftScroll.ScrollBarThickness = 5
-LeftScroll.BackgroundTransparency = 1
-local lLayout = Instance.new("UIListLayout", LeftScroll)
-lLayout.Padding = UDim.new(0,8)
-
-local AutoFarmTitle = Instance.new("TextLabel", LeftScroll)
-AutoFarmTitle.Size = UDim2.new(1, 0, 0, 26)
-AutoFarmTitle.Text = "Auto Farm"
-AutoFarmTitle.TextColor3 = Color3.fromRGB(255,255,255)
-AutoFarmTitle.BackgroundTransparency = 1
-AutoFarmTitle.Font = Enum.Font.GothamBold
-AutoFarmTitle.TextSize = 15
-AutoFarmTitle.TextXAlignment = Enum.TextXAlignment.Center
-
--- Auto farm button
-local AutoFarmBtn = Instance.new("TextButton", LeftScroll)
-AutoFarmBtn.Size = UDim2.new(1, 0, 0, 34)
-AutoFarmBtn.Text = "Level Farm"
-AutoFarmBtn.Font = Enum.Font.GothamBold
-AutoFarmBtn.TextSize = 14
-AutoFarmBtn.TextColor3 = Color3.fromRGB(255,255,255)
-AutoFarmBtn.BackgroundColor3 = Color3.fromRGB(30,30,30)
-Instance.new("UICorner", AutoFarmBtn).CornerRadius = UDim.new(0,6)
-
-local TickIcon = Instance.new("ImageLabel", AutoFarmBtn)
-TickIcon.Size = UDim2.new(0, 20, 0, 20)
-TickIcon.Position = UDim2.new(1, -26, 0.5, -10)
-TickIcon.BackgroundTransparency = 1
-TickIcon.Image = "" -- empty by default
-
-local AutoFarmEnabled = false
-AutoFarmBtn.MouseButton1Click:Connect(function()
-    AutoFarmEnabled = not AutoFarmEnabled
-    if AutoFarmEnabled then
-        TickIcon.Image = "rbxassetid://6031094690" -- check mark
-    else
-        TickIcon.Image = ""
-    end
-    getgenv().AutoFarmEnabled = AutoFarmEnabled
-end)
-
--- Panel Right = Setting Farm
-local RightPanel = Instance.new("Frame", GeneralTab)
-RightPanel.Size = UDim2.new(0.48, -6, 1, 0)
-RightPanel.Position = UDim2.new(0.52, 0, 0, 0)
-RightPanel.BackgroundTransparency = 1
-
-local RightScroll = Instance.new("ScrollingFrame", RightPanel)
-RightScroll.Size = UDim2.new(1, 0, 1, 0)
-RightScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-RightScroll.ScrollBarThickness = 5
-RightScroll.BackgroundTransparency = 1
-local rLayout = Instance.new("UIListLayout", RightScroll)
-rLayout.Padding = UDim.new(0,8)
-
--- Title Setting Farm
-local SettingTitle = Instance.new("TextLabel", RightScroll)
-SettingTitle.Size = UDim2.new(1, 0, 0, 26)
-SettingTitle.Text = "Setting Farm"
-SettingTitle.TextColor3 = Color3.fromRGB(255,255,255)
-SettingTitle.BackgroundTransparency = 1
-SettingTitle.Font = Enum.Font.GothamBold
-SettingTitle.TextSize = 15
-SettingTitle.TextXAlignment = Enum.TextXAlignment.Center
-
--- Time server
-local ServerTimeLbl = Instance.new("TextLabel", RightScroll)
-ServerTimeLbl.Size = UDim2.new(1, 0, 0, 20)
-ServerTimeLbl.BackgroundTransparency = 1
-ServerTimeLbl.Font = Enum.Font.Gotham
-ServerTimeLbl.TextSize = 13
-ServerTimeLbl.TextColor3 = Color3.fromRGB(200,200,200)
-ServerTimeLbl.TextXAlignment = Enum.TextXAlignment.Center
-
--- update time every second
-spawn(function()
-    while task.wait(1) do
-        local t = os.date("!%H:%M:%S")
-        ServerTimeLbl.Text = "Server Time: " .. t
-    end
-end)
-
--- Select Weapon button
-local SelectedWeapon = "Nothing"
-local DropDownBtn = Instance.new("TextButton", RightScroll)
-DropDownBtn.Size = UDim2.new(1, 0, 0, 34)
-DropDownBtn.Text = "Select Weapon: " .. SelectedWeapon
-DropDownBtn.Font = Enum.Font.GothamBold
-DropDownBtn.TextSize = 14
-DropDownBtn.TextColor3 = Color3.fromRGB(255,255,255)
-DropDownBtn.BackgroundColor3 = Color3.fromRGB(30,30,30)
-Instance.new("UICorner", DropDownBtn).CornerRadius = UDim.new(0,6)
-
--- Options frame
-local WeaponOptions = Instance.new("Frame", DropDownBtn)
-WeaponOptions.Size = UDim2.new(1, 0, 0, 90)
-WeaponOptions.Position = UDim2.new(0, 0, 1, 0)
-WeaponOptions.Visible = false
-WeaponOptions.BackgroundColor3 = Color3.fromRGB(25,25,25)
-Instance.new("UICorner", WeaponOptions).CornerRadius = UDim.new(0,6)
-
-local ScrollList = Instance.new("ScrollingFrame", WeaponOptions)
-ScrollList.Size = UDim2.new(1, 0, 1, 0)
-ScrollList.CanvasSize = UDim2.new(0, 0, 0, 60)
-ScrollList.ScrollBarThickness = 4
-ScrollList.BackgroundTransparency = 1
-local slLayout = Instance.new("UIListLayout", ScrollList)
-slLayout.Padding = UDim.new(0,4)
-
-local Weapons = {"Melee","Sword"}
-for _, name in ipairs(Weapons) do
-    local btn = Instance.new("TextButton", ScrollList)
-    btn.Size = UDim2.new(1, -8, 0, 26)
-    btn.Text = name
-    btn.Font = Enum.Font.Gotham
-    btn.TextSize = 13
-    btn.TextColor3 = Color3.fromRGB(255,255,255)
-    btn.BackgroundColor3 = Color3.fromRGB(40,40,40)
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0,6)
-    btn.MouseButton1Click:Connect(function()
-        SelectedWeapon = name
-        DropDownBtn.Text = "Select Weapon: " .. SelectedWeapon
-        WeaponOptions.Visible = false
-    end)
+    fruitESPs[item] = nil
 end
 
-DropDownBtn.MouseButton1Click:Connect(function()
-    WeaponOptions.Visible = not WeaponOptions.Visible
-end)
+-- Update loops
+local playerConn = nil
+local fruitConn = nil
 
--- Auto re-equip when farming
-spawn(function()
-    while task.wait(1) do
-        if AutoFarmEnabled and SelectedWeapon ~= "Nothing" then
-            pcall(function()
-                local tool = game.Players.LocalPlayer.Character:FindFirstChildOfClass("Tool")
-                if not tool or not tool.Name:lower():find(SelectedWeapon:lower()) then
-                    game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer("EquipWeapon", SelectedWeapon)
-                end
-            end)
-        end
-    end
-end)
-
--- Add panels to tab
-LeftPanel.Parent = GeneralTab
-RightPanel.Parent = GeneralTab
-
--- End of Part 3
-print("SangHub: Part 3 (General tab) loaded")
---==[ SangHub BF Script - Part 4 (Auto Farm Logic) ]==--
-
--- Fast Attack function
-local function fastAttack()
-    local vu = game:GetService("VirtualUser")
-    vu:CaptureController()
-    vu:Button1Down(Vector2.new(0,0))
-    task.wait(0.05)
-    vu:Button1Up(Vector2.new(0,0))
-end
-
--- Fake platform
-local function createPlatform()
-    local part = Instance.new("Part")
-    part.Size = Vector3.new(8,1,8)
-    part.Anchored = true
-    part.Transparency = 1
-    part.CanCollide = true
-    part.Parent = workspace
-    return part
-end
-
--- Farm function
-local function farmTarget(target)
-    if not target or not target:FindFirstChild("HumanoidRootPart") then return end
-    local hrp = target.HumanoidRootPart
-    local platform = createPlatform()
-
-    spawn(function()
-        while AutoFarmEnabled and target and target:FindFirstChild("Humanoid") and target.Humanoid.Health > 0 do
-            pcall(function()
-                -- Ghép 3 con: tìm thêm quái gần đó
-                for _, mob in pairs(workspace.Enemies:GetChildren()) do
-                    if mob ~= target and mob:FindFirstChild("HumanoidRootPart") then
-                        if (mob.HumanoidRootPart.Position - hrp.Position).Magnitude < 50 then
-                            mob.HumanoidRootPart.CFrame = hrp.CFrame
+-- Player ESP update loop
+local function startPlayerESPLoop()
+    if playerConn then return end
+    playerConn = RunService.Heartbeat:Connect(function()
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer then
+                local char = plr.Character
+                if char and char.Parent then
+                    local root = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Humanoid") and char.Humanoid.RootPart
+                    if root then
+                        -- ensure gui exists
+                        if getgenv().PlayerESP then
+                            if not playerESPs[plr] then createPlayerESP(plr) end
+                        else
+                            if playerESPs[plr] then removePlayerESP(plr) end
                         end
+                        -- update if exists
+                        local data = playerESPs[plr]
+                        if data and data.gui.Parent then
+                            local camPos = Workspace.CurrentCamera.CFrame.Position
+                            local dist = (root.Position - camPos).Magnitude
+                            data.distLabel.Text = string.format("%.1f m", dist)
+                            -- LOS check (no through walls)
+                            local visible = hasLoS(root.Position)
+                            data.gui.Enabled = visible
+                        end
+                    else
+                        if playerESPs[plr] then removePlayerESP(plr) end
+                    end
+                else
+                    if playerESPs[plr] then removePlayerESP(plr) end
+                end
+            end
+        end
+    end)
+end
+
+local function stopPlayerESPLoop()
+    if playerConn then
+        playerConn:Disconnect()
+        playerConn = nil
+    end
+    for plr, _ in pairs(playerESPs) do removePlayerESP(plr) end
+end
+
+-- Fruit ESP update loop (scan workspace for Tools with "Fruit" in name)
+local function startFruitESPLoop()
+    if fruitConn then return end
+    fruitConn = RunService.Heartbeat:Connect(function()
+        if not getgenv().FruitsESP then
+            -- remove all if off
+            for it, _ in pairs(fruitESPs) do removeFruitESP(it) end
+            return
+        end
+        -- scan tools in workspace (common places)
+        local function scanContainer(c)
+            for _, obj in ipairs(c:GetChildren()) do
+                if obj:IsA("Tool") or obj:IsA("Accessory") or obj:IsA("Model") then
+                    if string.find(obj.Name, "Fruit") or string.find(obj.Name, "fruit") then
+                        -- create esp if not exist
+                        if not fruitESPs[obj] then createFruitESP(obj) end
                     end
                 end
-
-                -- Đưa mình lên trên đầu quái
-                local pos = hrp.Position + Vector3.new(0, target.HumanoidRootPart.Size.Y * 3, 0)
-                platform.Position = Vector3.new(pos.X, pos.Y - 3, pos.Z)
-                game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(pos)
-
-                -- Fast attack
-                fastAttack()
-            end)
-            task.wait(0.05)
+            end
         end
-        platform:Destroy()
+        -- scan workspace root
+        scanContainer(Workspace)
+        -- scan descendants (to catch dropped fruit in other folders)
+        for _, c in ipairs(Workspace:GetChildren()) do
+            pcall(scanContainer, c)
+        end
+        -- cleanup invalid
+        for it, gui in pairs(fruitESPs) do
+            if not it or not it.Parent then removeFruitESP(it) end
+        end
     end)
 end
 
--- Main farm loop
-spawn(function()
-    while task.wait(0.2) do
-        if AutoFarmEnabled and SelectedWeapon ~= "Nothing" then
-            -- Tìm quái phù hợp Level hiện tại (bạn có thể dùng bảng BF_LevelFarm)
-            for _, mob in pairs(workspace.Enemies:GetChildren()) do
-                if mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
-                    farmTarget(mob)
-                    break
-                end
-            end
+local function stopFruitESPLoop()
+    if fruitConn then
+        fruitConn:Disconnect()
+        fruitConn = nil
+    end
+    for it, _ in pairs(fruitESPs) do removeFruitESP(it) end
+end
+
+-- Tie toggles to GUI buttons (create toggles in Shop & Mics right frame)
+-- Find rightFrame used earlier
+-- We created shopContainer with two frames earlier; we must locate rightFrame
+-- Simpler: iterate tabPages and find the one named Shop & Mics by index shopIndex
+local shopIndex = nil
+for i,name in ipairs(tabNames) do if name == "Shop & Mics" then shopIndex = i break end end
+local shopPage = tabPages[shopIndex]
+
+-- Build container if not already (we used earlier to create space, but to be safe, build here)
+local shopContainer2 = nil
+for _, child in ipairs(shopPage:GetChildren()) do
+    if child:IsA("Frame") and child.Size.X.Scale == 1 then
+        shopContainer2 = child
+        break
+    end
+end
+-- if not exist, create simple left/right frames
+if not shopContainer2 then
+    shopContainer2 = new("Frame", {Parent = shopPage, Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1})
+    new("UIListLayout", {Parent = shopContainer2, FillDirection = Enum.FillDirection.Horizontal, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0,8)})
+end
+
+-- find right frame inside container
+local rightFrame = nil
+for _, c in ipairs(shopContainer2:GetChildren()) do
+    if c:IsA("Frame") and c.Size.X.Scale == 0.5 then
+        if not rightFrame then rightFrame = c else rightFrame = rightFrame end
+    end
+end
+-- if not found, create rightFrame now
+if not rightFrame then
+    rightFrame = new("Frame", {Parent = shopContainer2, Size = UDim2.new(0.5, -6, 1, 0), BackgroundTransparency = 1})
+    new("UIListLayout", {Parent = rightFrame, FillDirection = Enum.FillDirection.Vertical, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0,8)})
+    new("UIPadding", {Parent = rightFrame, PaddingLeft = UDim.new(0,8), PaddingRight = UDim.new(0,8)})
+end
+
+-- add ESP title if missing
+local function ensureEspTitle()
+    for _, c in ipairs(rightFrame:GetChildren()) do
+        if c:IsA("TextLabel") and c.Text == "ESP" then return end
+    end
+    new("TextLabel", {
+        Parent = rightFrame,
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1,0,0,22),
+        Text = "ESP",
+        Font = Enum.Font.GothamBold,
+        TextSize = 16,
+        TextColor3 = BLUE,
+        TextXAlignment = Enum.TextXAlignment.Center
+    })
+end
+ensureEspTitle()
+
+-- Create toggles and hook actions
+local function addTogglesToRightFrame()
+    -- remove any existing toggle buttons we might have created earlier to avoid duplicates
+    for _, c in ipairs(rightFrame:GetChildren()) do
+        if c:IsA("TextButton") and (c.Name == "SangToggle_PlayerESP" or c.Name == "SangToggle_FruitESP") then
+            c:Destroy()
         end
+    end
+
+    -- Player ESP toggle
+    local playerBtn, getPlayerState
+    do
+        playerBtn = new("TextButton", {
+            Parent = rightFrame,
+            Name = "SangToggle_PlayerESP",
+            Size = UDim2.new(1, -12, 0, 36),
+            BackgroundColor3 = TAB_COLOR,
+            BorderSizePixel = 0,
+            Text = "",
+            AutoButtonColor = false
+        })
+        new("UICorner", {Parent = playerBtn, CornerRadius = UDim.new(0,6)})
+        new("UIStroke", {Parent = playerBtn, Color = BLUE, Thickness = 1})
+
+        new("TextLabel", {
+            Parent = playerBtn,
+            BackgroundTransparency = 1,
+            Position = UDim2.new(0,10,0,0),
+            Size = UDim2.new(1, -50, 1, 0),
+            Text = "Player ESP",
+            Font = Enum.Font.Gotham,
+            TextSize = 14,
+            TextColor3 = TEXT_COLOR,
+            TextXAlignment = Enum.TextXAlignment.Left
+        })
+        local circle = new("Frame", {Parent = playerBtn, Size = UDim2.new(0,20,0,20), Position = UDim2.new(1, -28, 0.5, -10), BackgroundColor3 = getgenv().PlayerESP and BLUE or Color3.fromRGB(100,100,100)})
+        new("UICorner", {Parent = circle, CornerRadius = UDim.new(1,0)})
+        local stroke = new("UIStroke", {Parent = circle, Color = getgenv().PlayerESP and BLUE or Color3.fromRGB(150,150,150), Thickness = 1.6})
+
+        playerBtn.MouseButton1Click:Connect(function()
+            local newS = not (getgenv().PlayerESP == true)
+            getgenv().PlayerESP = newS
+            TweenService:Create(circle, TweenInfo.new(0.18), {BackgroundColor3 = newS and BLUE or Color3.fromRGB(100,100,100)}):Play()
+            stroke.Color = newS and BLUE or Color3.fromRGB(150,150,150)
+            if newS then startPlayerESPLoop() else stopPlayerESPLoop() end
+        end)
+    end
+
+    -- Fruit ESP toggle
+    local fruitBtn
+    do
+        fruitBtn = new("TextButton", {
+            Parent = rightFrame,
+            Name = "SangToggle_FruitESP",
+            Size = UDim2.new(1, -12, 0, 36),
+            BackgroundColor3 = TAB_COLOR,
+            BorderSizePixel = 0,
+            Text = "",
+            AutoButtonColor = false
+        })
+        new("UICorner", {Parent = fruitBtn, CornerRadius = UDim.new(0,6)})
+        new("UIStroke", {Parent = fruitBtn, Color = BLUE, Thickness = 1})
+
+        new("TextLabel", {
+            Parent = fruitBtn,
+            BackgroundTransparency = 1,
+            Position = UDim2.new(0,10,0,0),
+            Size = UDim2.new(1, -50, 1, 0),
+            Text = "Fruit ESP",
+            Font = Enum.Font.Gotham,
+            TextSize = 14,
+            TextColor3 = TEXT_COLOR,
+            TextXAlignment = Enum.TextXAlignment.Left
+        })
+        local circle = new("Frame", {Parent = fruitBtn, Size = UDim2.new(0,20,0,20), Position = UDim2.new(1, -28, 0.5, -10), BackgroundColor3 = getgenv().FruitsESP and YELLOW or Color3.fromRGB(100,100,100)})
+        new("UICorner", {Parent = circle, CornerRadius = UDim.new(1,0)})
+        local stroke = new("UIStroke", {Parent = circle, Color = getgenv().FruitsESP and YELLOW or Color3.fromRGB(150,150,150), Thickness = 1.6})
+
+        fruitBtn.MouseButton1Click:Connect(function()
+            local newS = not (getgenv().FruitsESP == true)
+            getgenv().FruitsESP = newS
+            TweenService:Create(circle, TweenInfo.new(0.18), {BackgroundColor3 = newS and YELLOW or Color3.fromRGB(100,100,100)}):Play()
+            stroke.Color = newS and YELLOW or Color3.fromRGB(150,150,150)
+            if newS then startFruitESPLoop() else stopFruitESPLoop() end
+        end)
+    end
+end
+
+addTogglesToRightFrame()
+
+-- Ensure toggles match current getgenv state on load
+if getgenv().PlayerESP then startPlayerESPLoop() end
+if getgenv().FruitsESP then startFruitESPLoop() end
+
+-- GUI show/hide behaviour (kept as before, animated)
+local visible = true
+ToggleBtn.MouseButton1Click:Connect(function()
+    visible = not visible
+    if visible then
+        MainFrame.Visible = true
+        MainFrame.Size = UDim2.new(0,0,0,0)
+        TweenService:Create(MainFrame, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(0, GUI_W, 0, GUI_H)}):Play()
+    else
+        local tw = TweenService:Create(MainFrame, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Size = UDim2.new(0,0,0,0)})
+        tw:Play(); tw.Completed:Wait()
+        MainFrame.Visible = false
     end
 end)
 
-print("SangHub: Part 4 (Auto Farm Logic) loaded")
+-- Dragging (touch + mouse)
+do
+    local dragging, dragInput, dragStart, startPos
+    MainFrame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = MainFrame.Position
+            input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
+        end
+    end)
+    MainFrame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+print("Sang Hub GUI loaded. PlayerESP & FruitESP toggles available.")
